@@ -34,6 +34,7 @@ API:
     export_auto("qualquer.bin", "saida.obj")                 # face/trofeu (detecta tipo)
     export_stadium_complete("stad1_main.bin", "estadio.obj")  # estadio inteiro
     export_kit_complete("kit_1135", "camisa.obj")             # kit
+    convert_obj_to_vertex_uv("blender.obj", "pronto.obj")     # 1 UV por vertice
 
 CLI: `python -m wepes3d TEMPLATE OBJ [OUT] --type auto|face|trophy|stadium|kit ...`
 Docs em docs/ (08-trofeus, 09-estadios, 10-kits, 11-arquitetura).
@@ -42,7 +43,7 @@ Docs em docs/ (08-trofeus, 09-estadios, 10-kits, 11-arquitetura).
 __version__ = "2.2.0-dev"
 
 from .shared.io import compress_bin, decompress_bin
-from .shared.io import ObjMesh, parse_obj
+from .shared.io import ObjMesh, parse_obj, convert_obj_to_vertex_uv
 from .shared.model import (
     Model, Part, parse_model, write_model, detect_asset_type, locate_model,
 )
@@ -99,4 +100,5 @@ __all__ = [
     "Model", "Part", "parse_model", "write_model",
     "detect_asset_type", "locate_model",
     "compress_bin", "decompress_bin", "ObjMesh", "parse_obj",
+    "convert_obj_to_vertex_uv",
 ]

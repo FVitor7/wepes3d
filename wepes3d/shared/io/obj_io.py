@@ -22,6 +22,11 @@ TRIANGULACAO AUTOMATICA:
   - Funciona perfeitamente para poligonos CONVEXOS (caso comum de exports
     do Blender). Para poligonos concavos, fan pode gerar triangulos
     sobrepostos — triangule no Blender (Mesh > Triangulate Faces) primeiro.
+
+CONVERSAO 1 UV POR VERTICE (`convert_obj_to_vertex_uv`):
+  - Reescreve um .obj cujas faces usam indices de v e vt diferentes (caso
+    tipico do export do Blender) no formato `f i/i`: cada par (v, vt) unico
+    vira um vertice.
 """
 
 from dataclasses import dataclass
@@ -51,16 +56,82 @@ def parse_obj(filepath: str) -> ObjMesh:
     subsequente eh associado a esse grupo. Util para `--use-groups` que
     mapeia 1 grupo do .obj -> 1 part do PS2.
     """
-    vertices: List[Tuple[float, float, float]] = []
-    uvs: List[Tuple[float, float]] = []
+    vertices, uvs, polygons, poly_groups, group_names = _read_obj(filepath)
+    # So o indice do vertice: assume o UV na mesma posicao (vt == v).
+    polygons = [[v for v, _ in poly] for poly in polygons]
+
     faces: List[Tuple[int, int, int]] = []
     face_groups: List[int] = []
 
-    group_map = {"default": 0}
-    current_group = 0
-
     triangulated_count = 0   # quantas faces precisaram de fan triangulation
     extra_tris_from_fan = 0  # quantos triangulos extras geramos
+
+    for poly, group in zip(polygons, poly_groups):
+        # Fan triangulation: gera (poly[0], poly[i], poly[i+1])
+        # Para tri (len=3) eh um pass-through.
+        # Para quad (len=4) gera 2 tris.
+        # Para n-gono gera (n - 2) tris.
+        if len(poly) > 3:
+            triangulated_count += 1
+            extra_tris_from_fan += (len(poly) - 3)
+
+        for i in range(1, len(poly) - 1):
+            faces.append((poly[0], poly[i], poly[i + 1]))
+            face_groups.append(group)
+
+    if triangulated_count > 0:
+        print(f"      [INFO] {triangulated_count} face(s) com >3 vertices trianguladas "
+              f"(fan triangulation) — +{extra_tris_from_fan} triangulos.")
+
+    return ObjMesh(vertices=vertices, uvs=uvs, faces=faces,
+                   face_groups=face_groups, group_names=group_names)
+
+
+def convert_obj_to_vertex_uv(input_path: str, output_path: str) -> None:
+    """
+    Reescreve um .obj com 1 UV por vertice: cada par (v, vt) unico vira um
+    vertice e as faces passam a usar o MESMO indice para v e vt (`f i/i`) —
+    o formato que o import espera.
+
+    Util para .obj exportados do Blender, onde os indices de v e vt das faces
+    nao batem. Preserva grupos (`o`/`g`) e poligonos (nao triangula); descarta
+    normais e materiais. Um .obj ja alinhado sai com os vertices na mesma ordem.
+    """
+    vertices, uvs, polygons, poly_groups, group_names = _read_obj(input_path)
+    if not uvs:
+        raise ValueError(f"{input_path}: o .obj nao tem UVs (linhas 'vt').")
+    vertices, uvs, polygons = _unify_vertex_uv(vertices, uvs, polygons)
+
+    with open(output_path, 'w') as f:
+        for (x, y, z) in vertices:
+            f.write(f"v {x} {y} {z}\n")
+        for (u, v) in uvs:
+            f.write(f"vt {u} {v}\n")
+        current_group = 0
+        for poly, group in zip(polygons, poly_groups):
+            if group != current_group:
+                f.write(f"o {group_names[group]}\n")
+                current_group = group
+            f.write("f " + " ".join(f"{i + 1}/{i + 1}" for i in poly) + "\n")
+
+    print(f"{output_path}: {len(vertices)} vertices, {len(uvs)} UVs, "
+          f"{len(polygons)} faces (1 UV por vertice).")
+
+
+def _read_obj(filepath: str):
+    """
+    Le v/vt/g/o/f. Devolve (vertices, uvs, polygons, poly_groups, group_names);
+    cada polygon eh a lista de pares (v, vt) 0-based dos seus cantos — vt = v
+    quando a face nao referencia UV (`f 1 2 3` ou `f 1//1 ...`). Faces com
+    menos de 3 vertices (degeneradas) sao ignoradas.
+    """
+    vertices: List[Tuple[float, float, float]] = []
+    uvs: List[Tuple[float, float]] = []
+    polygons: List[List[Tuple[int, int]]] = []
+    poly_groups: List[int] = []
+
+    group_map = {"default": 0}
+    current_group = 0
 
     with open(filepath, 'r') as f:
         for line in f:
@@ -80,34 +151,51 @@ def parse_obj(filepath: str) -> ObjMesh:
                     group_map[name] = len(group_map)
                 current_group = group_map[name]
             elif tag == 'f':
-                # Coleta TODOS os vertices da face (nao trunca em 3).
-                poly: List[int] = []
+                # Coleta TODOS os cantos da face (nao trunca em 3).
+                poly: List[Tuple[int, int]] = []
                 for token in tokens[1:]:
-                    v_idx = int(token.split('/')[0]) - 1
-                    poly.append(v_idx)
-
-                if len(poly) < 3:
-                    continue   # face degenerada — ignora
-
-                # Fan triangulation: gera (poly[0], poly[i], poly[i+1])
-                # Para tri (len=3) eh um pass-through.
-                # Para quad (len=4) gera 2 tris.
-                # Para n-gono gera (n - 2) tris.
-                if len(poly) > 3:
-                    triangulated_count += 1
-                    extra_tris_from_fan += (len(poly) - 3)
-
-                for i in range(1, len(poly) - 1):
-                    faces.append((poly[0], poly[i], poly[i + 1]))
-                    face_groups.append(current_group)
-
-    if triangulated_count > 0:
-        print(f"      [INFO] {triangulated_count} face(s) com >3 vertices trianguladas "
-              f"(fan triangulation) — +{extra_tris_from_fan} triangulos.")
+                    fields = token.split('/')
+                    v_idx = int(fields[0]) - 1
+                    vt_idx = int(fields[1]) - 1 if len(fields) > 1 and fields[1] else v_idx
+                    poly.append((v_idx, vt_idx))
+                if len(poly) >= 3:
+                    polygons.append(poly)
+                    poly_groups.append(current_group)
 
     group_names = [''] * len(group_map)
     for name, idx in group_map.items():
         group_names[idx] = name
 
-    return ObjMesh(vertices=vertices, uvs=uvs, faces=faces,
-                   face_groups=face_groups, group_names=group_names)
+    return vertices, uvs, polygons, poly_groups, group_names
+
+
+def _unify_vertex_uv(vertices, uvs, polygons):
+    """
+    Garante 1 UV por vertice: cada par (v, vt) unico referenciado pelas faces
+    vira um vertice proprio — o vertice eh duplicado nos seams de UV.
+
+    Se todos os cantos ja usam vt == v (ex.: .obj gerado pelo export), devolve
+    vertices/UVs intactos e na mesma ordem. Senao, os vertices novos seguem a
+    ordem da 1a aparicao nas faces (vertices que nenhuma face usa somem).
+    Devolve (vertices, uvs, polygons) com cada polygon como lista de indices.
+    """
+    if all(v == vt for poly in polygons for v, vt in poly):
+        return vertices, uvs, [[v for v, _ in poly] for poly in polygons]
+
+    new_vertices: List[Tuple[float, float, float]] = []
+    new_uvs: List[Tuple[float, float]] = []
+    new_polygons: List[List[int]] = []
+    index_of = {}
+    for poly in polygons:
+        new_poly = []
+        for key in poly:
+            if key not in index_of:
+                index_of[key] = len(new_vertices)
+                new_vertices.append(vertices[key[0]])
+                new_uvs.append(uvs[key[1]])
+            new_poly.append(index_of[key])
+        new_polygons.append(new_poly)
+
+    print(f"      [INFO] indices v/vt diferentes nas faces: {len(vertices)} vertices "
+          f"-> {len(new_vertices)} (1 por par v/vt; duplicados nos seams de UV).")
+    return new_vertices, new_uvs, new_polygons

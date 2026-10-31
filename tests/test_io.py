@@ -1,10 +1,11 @@
-"""Testes de I/O: compressão/descompressão e leitura de .obj."""
+"""Testes de I/O: compressão/descompressão, leitura e conversão de .obj."""
 
 import pathlib
 import struct
 
 import pytest
 
+from wepes3d import convert_obj_to_vertex_uv
 from wepes3d.shared.io.bin_io import (
     compress_bin, decompress_bin, decompress_payload,
 )
@@ -82,3 +83,60 @@ def test_parse_obj_ignores_degenerate_face(write_obj):
         fh.write("f 1 2\n")                          # face com 2 vértices = degenerada
     mesh = parse_obj(path)
     assert mesh.faces == []
+
+
+# ---------------------------------------------------------------------------
+# convert_obj_to_vertex_uv (1 UV por vértice)
+# ---------------------------------------------------------------------------
+
+def _face_lines(path):
+    return [ln for ln in pathlib.Path(path).read_text().splitlines() if ln.startswith("f ")]
+
+
+def test_convert_obj_to_vertex_uv_splits_by_v_vt_pair(tmp_path, capsys):
+    # Como no export do Blender: índices de v e vt diferentes, e o vértice 1
+    # com 2 UVs (seam) -> vira 2 vértices.
+    src = tmp_path / "blender.obj"
+    src.write_text("o malha\n"
+                   "v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\n"
+                   "vt 0.5 0.5\nvt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\n"
+                   "f 1/2 2/3 3/4\nf 1/5 3/4 4/1\n")
+    out = tmp_path / "pronto.obj"
+    convert_obj_to_vertex_uv(str(src), str(out))
+    assert "4 vertices -> 5" in capsys.readouterr().out
+
+    for line in _face_lines(out):                     # toda face no formato i/i
+        assert all(t.split("/")[0] == t.split("/")[1] for t in line.split()[1:])
+    mesh = parse_obj(str(out))
+    assert len(mesh.vertices) == len(mesh.uvs) == 5
+    assert mesh.faces == [(0, 1, 2), (3, 2, 4)]
+    assert mesh.vertices[0] == mesh.vertices[3] == (0.0, 0.0, 0.0)   # duplicado
+    assert mesh.uvs[0] == (0.0, 0.0) and mesh.uvs[3] == (0.0, 1.0)  # UV de cada lado
+    assert "malha" in mesh.group_names                # grupo preservado
+
+
+def test_convert_obj_to_vertex_uv_keeps_aligned_obj(face_obj, tmp_path):
+    # .obj já alinhado (gerado pelo export): mesmos vértices, na mesma ordem.
+    out = tmp_path / "face_conv.obj"
+    convert_obj_to_vertex_uv(face_obj, str(out))
+    orig, conv = parse_obj(face_obj), parse_obj(str(out))
+    assert conv.vertices == orig.vertices
+    assert conv.uvs == orig.uvs
+    assert conv.faces == orig.faces
+
+
+def test_convert_obj_to_vertex_uv_keeps_polygons(tmp_path):
+    src = tmp_path / "quad.obj"
+    src.write_text("v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\n"
+                   "vt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\nf 1/4 2/3 3/2 4/1\n")
+    out = tmp_path / "quad_conv.obj"
+    convert_obj_to_vertex_uv(str(src), str(out))
+    assert _face_lines(out) == ["f 1/1 2/2 3/3 4/4"]  # quad continua quad
+    assert parse_obj(str(out)).uvs[0] == (0.0, 1.0)   # UV do canto 1 (vt 4)
+
+
+def test_convert_obj_to_vertex_uv_requires_uvs(tmp_path):
+    src = tmp_path / "semuv.obj"
+    src.write_text("v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n")
+    with pytest.raises(ValueError):
+        convert_obj_to_vertex_uv(str(src), str(tmp_path / "x.obj"))

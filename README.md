@@ -207,6 +207,11 @@ export_trophy("trofeu.bin", "taca.obj", section=0)
 export_stadium_complete("estadio.bin", "estadio.obj")
 export_pc_complete("pl.str", "trofeu_pc.obj")        # PES6 PC
 
+# Reescrever um .obj com 1 UV por vértice (`f i/i`) — p.ex. um export do Blender,
+# onde os índices de v e vt das faces não batem:
+from wepes3d import convert_obj_to_vertex_uv
+convert_obj_to_vertex_uv("blender.obj", "pronto.obj")
+
 # Componentes de baixo nível:
 from wepes3d import parse_model, decompress_bin, detect_asset_type
 payload, header, trailing = decompress_bin("trofeu.bin")

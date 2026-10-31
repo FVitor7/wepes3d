@@ -34,7 +34,7 @@ python -m pytest --cov-report=html
 
 | Arquivo | Foco |
 |---|---|
-| `test_io.py` | compressão/descompressão `.bin`; leitura de `.obj` (triangulação, grupos). |
+| `test_io.py` | compressão/descompressão `.bin`; leitura de `.obj` (triangulação, grupos); conversão 1 UV por vértice. |
 | `test_coords.py` | `CoordSpace`: a conversão `int16 ↔ float` é **lossless** (face/troféu/estádio/PC). |
 | `test_geometry.py` | bounding box, auto-fit, cálculo de normais. |
 | `test_parser.py` | detecção (face/troféu), navegação e serialização (`write_model` lossless). |

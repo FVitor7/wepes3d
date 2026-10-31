@@ -42,7 +42,7 @@ wepes3d/                   raiz do repositório
       io/
         bin_io.py            (de)compressão .bin (zlib + header)
         pes_archive.py       "sistema de arquivos" PES (containers, load_blocks, model_offsets)
-        obj_io.py            leitura .obj → ObjMesh
+        obj_io.py            leitura .obj → ObjMesh + convert_obj_to_vertex_uv (1 UV/vértice)
         obj_write.py         escrita .obj (+ .mtl), com grupos opcionais
       geometry/
         coords.py            tipo CoordSpace (int16↔float) + UV + clamp16
