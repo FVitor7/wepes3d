@@ -1,0 +1,14 @@
+# Artefatos de Python / testes (não versionar)
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+
+# Sistema operacional
+.DS_Store
+
+# Experimentos locais (.obj/.bin/.py de teste) — não versionar
+backup/

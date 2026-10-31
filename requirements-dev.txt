@@ -1,0 +1,5 @@
+# Dependências de DESENVOLVIMENTO / TESTE.
+# O pacote em si (runtime) não precisa de nada além da stdlib do Python.
+# Estas são usadas só para rodar a suíte de testes e medir cobertura.
+pytest>=7.0
+pytest-cov>=4.0
