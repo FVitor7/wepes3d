@@ -46,6 +46,17 @@ PARTS_INFO_OFFSET = 32
 """Offset relativo a `offset_file_1` onde fica `total_parts` (uint32).
 Em seguida (offset + 4) vem `parts_start_rel`."""
 
+PARTS_END_REL_OFFSET = 0x2C
+"""Offset relativo a `offset_file_1` onde fica o FIM das parts, gravado
+RELATIVO ao modelo: `parts_end - offset_file_1` (uint32). Muda junto com o
+tamanho das parts.
+
+Validado em todos os modelos reais analisados (faces com o modelo em 0x10 e
+em 0x20, as 9 secoes dos trofeus, kits e estadios). Em face.bin, com o modelo
+em 0x10, ele coincide com `payload[0x3C] = parts_end - 16` — e foi assim que o
+Bug 4 o descreveu, o que deixava templates com o modelo em 0x20 (h2, face_1)
+e os trofeus com esse campo desatualizado no recount."""
+
 TEXTURE_INDEX_IN_PART = 52
 """Offset relativo ao inicio de uma part onde fica `tex_id` (uint32)."""
 

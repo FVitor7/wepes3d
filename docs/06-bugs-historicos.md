@@ -1,9 +1,9 @@
 # 06 — Histórico de bugs
 
-Doze bugs encontrados e resolvidos durante a engenharia reversa do formato. Cada um
-conta uma história: o **sintoma**, a **investigação** que levou ao diagnóstico, e o
-**fix**. É a parte mais valiosa para entender **por que** o código é como é — e como
-abordar bugs novos.
+Quinze bugs encontrados e resolvidos durante a engenharia reversa do formato (os três
+últimos na revisão para publicar o projeto). Cada um conta uma história: o
+**sintoma**, a **investigação** que levou ao diagnóstico, e o **fix**. É a parte mais
+valiosa para entender **por que** o código é como é — e como abordar bugs novos.
 
 ```mermaid
 flowchart LR
@@ -20,10 +20,13 @@ flowchart LR
         B7["7 · NORMAL_SCALE por amostra"]
         B11["11 · textura tomada por bones"]
         B12["12 · byte[0x04] 'dinâmico' (é constante)"]
+        B14["14 · parts_end 'absoluto' (é relativo ao modelo)"]
     end
     subgraph GEOM["Geometria"]
         B8["8 · winding invertido"]
         B9["9 · escala/posição"]
+        B13["13 · triângulo degenerado no decode_strip"]
+        B15["15 · UV pela posição, não pelo vt"]
     end
 ```
 
@@ -62,6 +65,11 @@ for off in range(0, pre_parts_size, 4):
     if val == orig_parts_end:        write_uint32(off, new_parts_end)
     elif val == orig_parts_end - 16: write_uint32(off, new_parts_end - 16)
 ```
+
+> **Revisão ([Bug 14](#bug-14--fim-das-parts-relativo-ao-modelo)):** o `0x3C` não é
+> "`parts_end − 16`": é o fim das parts **relativo ao modelo**
+> (`offset_file_1 + 0x2C`). Só coincide com `−16` porque o `face.bin` tem o modelo
+> em `0x10`.
 
 ## Bug 5 — IMMED de normais/UVs alterado erradamente
 
@@ -144,6 +152,52 @@ exemplos:
 > 8 parts, com mensagem explicativa. **Lição:** valide com 3+ exemplos antes de
 mexer num campo "descoberto".
 
+## Bug 13 — Triângulo degenerado no `decode_strip`
+
+**Sintoma:** reimportar um `.obj` exportado, **sem editar**, recodificava parts
+intactas (2 de 8 no `face.bin`, 2 de 14 no troféu de teste): o payload crescia e o
+roundtrip não dava zero-diff. **Diagnóstico:** o passthrough compara os triângulos
+do `.obj` com os do strip original decodificado pelo `decode_strip` — mas o `.obj`
+vem do leitor do export (`read_part_geometry`), e os dois discordavam em **1
+triângulo por part**. O `decode_strip` testava `a != b` nos índices ainda
+**codificados**; `neg(v)` e `pos(v)` diferem só no sinal, então passava um triângulo
+degenerado (no `face.bin`, só com os vértices 31 e 72) que o leitor do export
+descarta. **Fix:** exigir os 3 índices **decodificados** distintos. O payload do
+roundtrip agora sai byte-idêntico (e o `.bin` do troféu de teste, `cmp`-idêntico).
+**Lição:** dois decoders do mesmo formato precisam concordar — confronte um com o
+outro nos arquivos reais.
+
+## Bug 14 — Fim das parts relativo ao modelo
+
+**Sintoma:** o do [Bug 4](#bug-4--segundo-ponteiro-parts_end---16-não-atualizado)
+(editores da comunidade podem não abrir o `.bin`), mas só em templates com o modelo
+**fora de `0x10`** — troféus e faces como `h2`/`face_1` — por isso passava batido com
+o `face.bin`. Achado auditando um troféu reimportado: após o recount da `sec0`,
+`sec0 + 0x2C` seguia com o valor do template (`0x9160`; devia ser `0x7D90`).
+**Diagnóstico:** em 55 modelos reais (faces com o modelo em `0x10` e em `0x20`, as 9
+seções de 4 troféus, kits e estádios), `modelo + 0x2C == parts_end − offset_do_modelo`
+em **todos**: é o fim das parts relativo ao modelo, irmão do `parts_start_rel` em
+`+0x24`. O "`parts_end − 16`" do Bug 4 só valia porque o `face.bin` tem o modelo em
+`0x10`; com o modelo em `0x20` a busca defensiva não o achava, e no troféu ela nem
+olhava o model header. **Fix:** gravar `offset_file_1 + 0x2C = parts_end −
+offset_file_1` explicitamente no import (face e troféu), depois do patch dos
+ponteiros. **Lição:** um valor "absoluto − constante" pode ser um valor **relativo** —
+teste com a estrutura em outro offset.
+
+## Bug 15 — UV do `.obj` pela posição, não pelo `vt`
+
+**Sintoma:** textura embaralhada em malhas exportadas do Blender, **sem nenhum erro**
+— bastava o `.obj` ter o mesmo número de `v` e `vt`. **Diagnóstico:** o `parse_obj`
+lia só o índice do vértice de cada canto da face e assumia que o UV do vértice `i`
+era o `vt` `i`. Isso vale para o `.obj` do export (sempre `f i/i`), mas o Blender
+grava `v` e `vt` em ordens próprias: num export real, 3262 de 3264 cantos tinham
+índices diferentes. Com contagens diferentes (seams), o import abortava pedindo
+`Merge UVs by Distance` — o que não resolve a ordem. **Fix:** o `parse_obj` segue o
+`vt` de cada canto e cria 1 vértice por par `(v, vt)` único (duplicado nos seams);
+`.obj` já alinhados passam intactos. A mesma lógica grava o resultado em disco via
+`convert_obj_to_vertex_uv`. **Lição:** validar **contagens** não valida
+**correspondência**.
+
 ---
 
 ## Padrões transversais (lições gerais)
@@ -153,7 +207,7 @@ flowchart TB
     R["Lições da engenharia reversa"]
     R --> L1["Redundância<br/>vbe em 4 lugares · ss em 2 · parts_end em 2<br/>(cópias locais para o microcode)"]
     R --> L2["Layout interleaved<br/>não é óbvio no .bin puro → ler o STCYCL antes"]
-    R --> L3["Constantes traiçoeiras<br/>parecem fixas mas variam (0x2C/0x30)<br/>parecem variar mas são fixas (0x04)<br/>→ comparar 3+ templates"]
+    R --> L3["Constantes traiçoeiras<br/>parecem fixas mas variam (0x2C/0x30)<br/>parecem variar mas são fixas (0x04)<br/>parecem absolutas mas são relativas (0x3C)<br/>→ comparar 3+ templates"]
     R --> L4["Validação<br/>editores externos ignoram o microcode<br/>'só funciona no editor' = campo do VU errado"]
     R --> L5["Bytes não são identidade<br/>padrão observado ≠ estrutura<br/>(alpha RGBA parecia bone_idx)"]
 ```
@@ -161,8 +215,9 @@ flowchart TB
 1. **Redundância de campos derivados** — o mesmo valor copiado em 2–4 lugares,
    cada um lido por uma etapa. Suspeite de *qualquer* uint32 do header.
 2. **Layout interleaved** não é óbvio no `.bin` puro — leia o `STCYCL` (0x10C).
-3. **Constantes traiçoeiras** — só comparando 3+ templates dá para saber o que é
-   derivado e o que é fixo.
+3. **Constantes traiçoeiras** — só comparando 3+ templates (de preferência com a
+   estrutura em offsets diferentes) dá para saber o que é derivado, o que é fixo e
+   o que é relativo.
 4. **Editores externos não validam o microcode** — "funciona no editor, falha no
    jogo" aponta para um campo lido pelo VU (params, IMMEDs, bbox).
 5. **Bytes não são identidade** — padrão observado pode ser coincidência (Bug 11).

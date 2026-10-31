@@ -57,15 +57,23 @@ a 48** elementos V4-16.
 | `0x014` | uint32 | 8 | constante |
 | **`0x030`** | uint32 | 8 | **`total_parts` real** (em `offset_file_1 + 0x20`). **Atualizar** se o nº de parts mudar. |
 | `0x034` | uint32 | `0x100` | `parts_start_rel` (relativo a `offset_file_1`) |
-| **`0x03C`** | uint32 | `0x41B0` | ⚠ **`parts_end - 16`** — outro ponteiro absoluto (DMA chain). **Atualizar** junto com `0x00C`. |
+| **`0x03C`** | uint32 | `0x41B0` | ⚠ **fim das parts relativo ao modelo** (`offset_file_1 + 0x2C` = `parts_end − offset_file_1`). Com o modelo em `0x10`, coincide com `parts_end − 16`. **Atualizar** junto com `0x00C`. |
 | `0x040..0x0DC` | — | — | metadata (vec4 floats etc.) |
 | `0x0E0..0x10F` | — | — | constantes + padding |
 
 ### Por que `parts_end` aparece duas vezes?
 
-`0x0C` e `0x3C` são lidos por **rotinas diferentes** do engine (`0x0C` pelo loader
-que mapeia `post_parts`; `0x3C` por uma DMA chain). Atualizar só um → estrutura lida
-de lugar errado → face corrompida/invisível (foi o [Bug 4](06-bugs-historicos.md#bug-4--segundo-ponteiro-parts_end---16-não-atualizado)).
+São dois campos de **níveis diferentes**: `0x0C` é do header do arquivo e guarda o
+fim das parts **absoluto** (onde começa o `post_parts`); `offset_file_1 + 0x2C` é do
+model header e guarda o mesmo fim **relativo ao modelo** — como o `parts_start_rel`
+em `+0x24`. Atualizar só um → editores da comunidade crasham ao abrir o `.bin`
+(foi o [Bug 4](06-bugs-historicos.md#bug-4--segundo-ponteiro-parts_end---16-não-atualizado),
+revisto no [Bug 14](06-bugs-historicos.md#bug-14--fim-das-parts-relativo-ao-modelo)).
+
+> ⚠ Em `face.bin` o modelo começa em `0x10`, então o campo relativo cai em `0x3C`
+> e vale `parts_end − 16` — e foi descrito assim por muito tempo. Com o modelo em
+> `0x20` (`h2`, `face_1`…) ele fica em `0x4C` e vale `parts_end − 0x20`; num troféu,
+> em `seção + 0x2C`. Validado em faces, troféus, kits e estádios reais.
 
 ---
 
@@ -228,7 +236,7 @@ flowchart LR
 |---|---|
 | `payload[offset_file_1 + 0x20]` | `total_parts` |
 | `payload[0x0C]` | `parts_end` = `pre_parts_size + Σ part.size` |
-| `payload[0x3C]` | `parts_end − 16` |
+| `payload[offset_file_1 + 0x2C]` | `parts_end − offset_file_1` (relativo ao modelo; em `face.bin` é o `0x3C` = `parts_end − 16`) |
 
 **Não tocar:** `payload[0x04] = 8` (constante; subir invisibiliza a face — [Bug 12](06-bugs-historicos.md#bug-12--mais-de-8-parts--face-invisível)).
 

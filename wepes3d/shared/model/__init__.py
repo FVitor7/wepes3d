@@ -20,7 +20,7 @@ from .strip import (
     pad_to_length, decode_strip,
 )
 from .rebuilder import (
-    update_vertex_count_in_header, rebuild_part, patch_total_parts,
+    update_vertex_count_in_header, rebuild_part, patch_total_parts, patch_parts_end,
 )
 
 __all__ = [
@@ -30,4 +30,5 @@ __all__ = [
     "triangles_to_pes_strip", "pack_strip_indices", "align_strip_to_v4",
     "pad_to_length", "decode_strip",
     "update_vertex_count_in_header", "rebuild_part", "patch_total_parts",
+    "patch_parts_end",
 ]

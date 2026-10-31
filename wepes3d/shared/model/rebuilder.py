@@ -31,7 +31,7 @@ from typing import List, Optional, Tuple
 
 from ..constants import (
     DMA_ALIGN, MAX_VERTEX_COUNT_PER_PART, MAX_STRIP_NUM,
-    VERTEX_IN_PART_OFFSET,
+    PARTS_END_REL_OFFSET, VERTEX_IN_PART_OFFSET,
 )
 from .parser import Part
 from .strip import (
@@ -272,5 +272,14 @@ def patch_total_parts(pre_parts_bytes: bytes, offset_file_1: int,
     """Atualiza `total_parts` no model header (offset_file_1 + 0x20)."""
     arr = bytearray(pre_parts_bytes)
     struct.pack_into("<I", arr, offset_file_1 + 0x20, new_total)
+    return bytes(arr)
+
+
+def patch_parts_end(payload: bytes, offset_file_1: int, new_parts_end: int) -> bytes:
+    """Atualiza o fim das parts no model header (offset_file_1 + 0x2C), que eh
+    gravado RELATIVO ao modelo: `new_parts_end - offset_file_1`."""
+    arr = bytearray(payload)
+    struct.pack_into("<I", arr, offset_file_1 + PARTS_END_REL_OFFSET,
+                     new_parts_end - offset_file_1)
     return bytes(arr)
 

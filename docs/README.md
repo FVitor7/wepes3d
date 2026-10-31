@@ -121,7 +121,7 @@ O **modelo 3D interno (camada 3) é IDÊNTICO** em todos os assets — só mudam
 - **pasta de modelos** — payload com `[0]`=total e uma TOC de offsets (estádio/kit).
 - **CoordSpace** — a conversão int16 ↔ float (escala+eixos) de cada asset.
 - **passthrough / zero-diff** — quando a geometria reproduz o template, o strip
-  original é preservado e o `.bin` sai byte-idêntico.
+  original é preservado e o payload do `.bin` sai byte-idêntico.
 - **template** — o `.bin` original do jogo usado como "casca" no import (header,
   bones, texturas) — só a geometria é trocada.
 

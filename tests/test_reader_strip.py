@@ -93,6 +93,13 @@ def test_decode_strip_case2_degenerate():
     assert decode_strip([-32764, 12, 12], vc=10) == []
 
 
+def test_decode_strip_degenerate_mixed_signs():
+    # [neg(0), kick(0), kick(1)] -> a != b só pelo sinal, mas decodifica em
+    # (0, 0, 1): degenerado -> descartado, como no leitor do export. Antes,
+    # esse triângulo fantasma fazia o passthrough recodificar parts intactas.
+    assert decode_strip([-32764, 4, 8], vc=10) == []
+
+
 def test_align_strip_to_v4():
     assert len(align_strip_to_v4([1, 2, 3])) == 4          # padding até múltiplo de 4
     assert align_strip_to_v4([1, 2, 3, 4]) == [1, 2, 3, 4]  # já alinhado

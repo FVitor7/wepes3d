@@ -143,7 +143,10 @@ def decode_strip(indices: List[int], vc: int) -> List[Tuple[int, int, int]]:
         return (8192 + value - 1) if is_restart else (value - 1)
 
     def valid(tri: Tuple[int, int, int]) -> bool:
-        return all(0 <= i < vc for i in tri)
+        # Indices DECODIFICADOS distintos: neg(v) e pos(v) diferem so no sinal,
+        # passam no `a != b` abaixo e formariam um triangulo degenerado — que o
+        # leitor do export (reader.read_part_geometry) descarta.
+        return all(0 <= i < vc for i in tri) and len(set(tri)) == 3
 
     for f in range(len(divided) - 2):
         a, b, c = divided[f], divided[f + 1], divided[f + 2]

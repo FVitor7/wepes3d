@@ -86,9 +86,11 @@ de parts original — você **não** precisa de `--allow-recount`.
 
 > **Roundtrip byte-idêntico (zero-diff):** se o `.obj` reproduzir *exatamente* a
 > geometria do template (mesmos vértices/UVs/normais e os mesmos triângulos), o
-> **strip original é preservado** e o `.bin` de saída fica **idêntico** ao de
-> entrada. Assim que você edita uma part, **só ela** é recodificada. Detalhes em
-> [03 §Validação](03-pipeline.md#validação-roundtrip) e [05](05-strip-encoding.md).
+> **strip original é preservado** e o **payload** do `.bin` de saída fica
+> **idêntico** ao de entrada (o arquivo comprimido só difere se o zlib do Python
+> não reproduzir a compressão original). Assim que você edita uma part, **só ela** é
+> recodificada. Detalhes em [03 §Validação](03-pipeline.md#validação-roundtrip) e
+> [05](05-strip-encoding.md).
 
 ---
 
@@ -99,7 +101,7 @@ num jogador. A contagem de vértices é diferente do template.
 
 ```mermaid
 flowchart LR
-    B["Blender:<br/>triangular · 1 UV/vért · decimar"] --> O["rosto.obj"]
+    B["Blender:<br/>triangular · decimar"] --> O["rosto.obj"]
     T["face.bin<br/>(template)"] --> IMP
     O --> IMP["import --allow-recount<br/>--recalculate-normals --auto-fit"]
     IMP --> S["saida.bin"]
@@ -108,7 +110,9 @@ flowchart LR
 **1) Prepare a malha no Blender:**
 - **Triangule**: `Mesh → Triangulate Faces` (n-gonos convexos são triangulados por
   leque automaticamente, mas côncavos exigem isso).
-- **1 UV por vértice** (sem *seams* de UV): `UV Editor → UV → Merge UVs by Distance`.
+- **UVs**: *seams* e índices de `v`/`vt` diferentes (o normal no export do Blender)
+  são resolvidos na leitura — o vértice é duplicado em cada seam. Para economizar
+  vértices, `UV Editor → UV → Merge UVs by Distance` ainda ajuda.
 - **Reduza polígonos** (`Decimate`): mire **≤ ~1.300 vértices no total** e
   **≤ ~170 por região** (o *strip* estoura antes do limite de 255 — ver [limites](#limites-do-formato)).
 - Escala/posição **não importam** — `--auto-fit` encaixa no bbox do template.
@@ -246,8 +250,8 @@ export_pc("Kroos.bin", "rosto.obj")        # face PC = 1 modelo
 ## Checklist do `.obj` (antes de importar)
 
 - [ ] **Triangulado** (n-gonos convexos são triangulados por leque automaticamente).
-- [ ] **1 UV por vértice** (sem *seams*) — `UV → Merge UVs by Distance`.
-- [ ] **Decimado** ao orçamento de vértices (ver abaixo).
+- [ ] **Decimado** ao orçamento de vértices (ver abaixo) — lembrando que cada
+      *seam* de UV duplica vértices (`UV → Merge UVs by Distance` reduz isso).
 - [ ] Exportado **com UVs**. Escala/posição livres (use `--auto-fit`).
 
 ### Limites do formato

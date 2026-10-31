@@ -89,18 +89,21 @@ decodifica o strip com a correção `diff`. Devolve ints crus; a escala/eixos v�
 ## 4. Resize: o que muda quando o `.obj` tem tamanho diferente
 
 Ao reconstruir sec0 com **Δ** bytes a mais/menos, tudo após o `parts_end` da seção
-alvo **desliza Δ**. `rebuilder.patch_trophy_sections` corrige:
+alvo **desliza Δ**. O `patch_resize` de `trophies/profile.py` e o importer corrigem:
 
 ```mermaid
 flowchart TB
     R["recount sec0 → Δ bytes"] --> D1["diretório de seções:<br/>cada entrada com alvo ≥ parts_end recebe +Δ"]
     R --> D2["header externo (0x00..base):<br/>ponteiros absolutos ≥ parts_end recebem +Δ<br/>(ex.: payload[0x0C] → container de texturas)"]
     R --> D3["total_parts da seção alvo (model_offset+0x20), se mudou"]
+    R --> D4["fim das parts da seção alvo (model_offset+0x2C),<br/>relativo ao modelo: parts_end − model_offset"]
 ```
 
 Validado: após um recount, **as seções continuam caindo em `03 00 FF FF`** e o
 container de texturas em `00 06 00 00`, deslocado por Δ exato; as demais seções
-ficam byte-a-byte intactas.
+ficam byte-a-byte intactas (o fim das parts delas é relativo ao próprio modelo, então
+não muda). O D4 só passou a ser gravado com o
+[Bug 14](06-bugs-historicos.md#bug-14--fim-das-parts-relativo-ao-modelo).
 
 ---
 

@@ -119,7 +119,7 @@ flowchart LR
     SN["sn (elementos do strip)"] --> H10["header[0x10] = sn·4"]
     SN --> HCA["prologue[0xCA] = ss+sn (se)"]
     PS["part_size"] --> H00["header[0x00] · header[0x0C] = QWC"]
-    PE["parts_end"] --> PP["payload[0x0C] e [0x3C] (= parts_end−16)"]
+    PE["parts_end"] --> PP["payload[0x0C] (absoluto) · model header +0x2C (relativo ao modelo)"]
 ```
 
 A descoberta de **quais** bytes são esses, **onde** estão e **por que** existem
@@ -141,16 +141,19 @@ três documentos.
 
 Toda part cuja geometria **reproduz exatamente** a do template tem o **strip original
 preservado** (em vez de recodificado). Logo, reimportar um `.obj` exportado do
-próprio template **sem editar** resulta num `.bin` **byte-idêntico**:
+próprio template **sem editar** resulta num **payload byte-idêntico**:
 
 ```bash
 python -m wepes3d export face.bin face.obj --type face
 python -m wepes3d import face.bin face.obj rt.bin --type face
-cmp face.bin rt.bin && echo "zero-diff ✓"
+python -c "from wepes3d import decompress_bin as d; print(d('face.bin')[0] == d('rt.bin')[0])"
+# True
 ```
 
-Ao editar, **só as parts alteradas** são recodificadas (strip `connected` por
-padrão). A **geometria** é sempre preservada. Ver [03 §Validação](docs/03-pipeline.md#validação-roundtrip).
+O `.bin` comprimido também sai idêntico (`cmp` passa) quando o zlib do Python
+reproduz a compressão do arquivo original — acontece com o troféu de teste, não com
+`examples/face.bin`. Ao editar, **só as parts alteradas** são recodificadas (strip
+`connected` por padrão). A **geometria** é sempre preservada. Ver [03 §Validação](docs/03-pipeline.md#validação-roundtrip).
 
 ---
 
@@ -207,8 +210,8 @@ export_trophy("trofeu.bin", "taca.obj", section=0)
 export_stadium_complete("estadio.bin", "estadio.obj")
 export_pc_complete("pl.str", "trofeu_pc.obj")        # PES6 PC
 
-# Reescrever um .obj com 1 UV por vértice (`f i/i`) — p.ex. um export do Blender,
-# onde os índices de v e vt das faces não batem:
+# Reescrever um .obj com 1 UV por vértice (`f i/i`). O import já faz isso na
+# leitura; útil para conferir no Blender o que ele vai enxergar:
 from wepes3d import convert_obj_to_vertex_uv
 convert_obj_to_vertex_uv("blender.obj", "pronto.obj")
 
@@ -223,7 +226,9 @@ print(detect_asset_type(payload))                    # 'face' ou 'trophy'
 ## Como preparar o `.obj`
 
 1. **Triangule** (n-gonos convexos são triangulados por leque; côncavos, no Blender).
-2. **1 UV por vértice** (sem *seams*): `UV → Merge UVs by Distance`.
+2. **UVs:** *seams* e índices de `v`/`vt` diferentes (export do Blender) são
+   resolvidos na leitura — o vértice é duplicado em cada seam. `UV → Merge UVs by
+   Distance` ainda ajuda a economizar vértices.
 3. **Decime** ao orçamento: **≤ ~1.300 vértices** no total e **≤ ~170 por região**
    (o strip estoura antes do limite de 255 v/part).
 4. Exporte **com UVs**. Escala/posição livres (use `--auto-fit`).

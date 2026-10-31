@@ -85,6 +85,34 @@ def test_parse_obj_ignores_degenerate_face(write_obj):
     assert mesh.faces == []
 
 
+def test_parse_obj_follows_vt_index(tmp_path):
+    # Mesma contagem de v e vt, mas em ordens diferentes (export do Blender):
+    # cada vértice recebe o UV que a face aponta, não o da mesma posição.
+    src = tmp_path / "perm.obj"
+    src.write_text("v 0 0 0\nv 1 0 0\nv 0 1 0\n"
+                   "vt 0 1\nvt 1 0\nvt 0 0\n"
+                   "f 1/3 2/2 3/1\n")
+    mesh = parse_obj(str(src))
+    assert mesh.vertices == [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)]
+    assert mesh.uvs == [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)]
+    assert mesh.faces == [(0, 1, 2)]
+
+
+def test_parse_obj_splits_vertex_at_uv_seam(tmp_path, capsys):
+    # O vértice 1 aparece com 2 UVs (seam) -> vira 2 vértices, e o import não
+    # aborta mais por "X vertices mas Y UVs".
+    src = tmp_path / "seam.obj"
+    src.write_text("v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\n"
+                   "vt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\nvt 0.5 0.5\n"
+                   "f 1/1 2/2 3/3\nf 1/5 3/3 4/4\n")
+    mesh = parse_obj(str(src))
+    assert len(mesh.vertices) == len(mesh.uvs) == 5
+    assert mesh.faces == [(0, 1, 2), (3, 2, 4)]
+    assert mesh.vertices[3] == mesh.vertices[0]
+    assert mesh.uvs[3] == (0.5, 0.5)
+    assert "4 vertices -> 5" in capsys.readouterr().out
+
+
 # ---------------------------------------------------------------------------
 # convert_obj_to_vertex_uv (1 UV por vértice)
 # ---------------------------------------------------------------------------

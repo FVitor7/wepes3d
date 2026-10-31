@@ -25,7 +25,7 @@ from ..geometry.transform import auto_fit_vertices, compute_vertex_normals
 from ..io.bin_io import compress_bin, decompress_bin
 from ..io.obj_io import ObjMesh, parse_obj
 from ..model.parser import Model, clone_part_structure, parse_model, write_model
-from ..model.rebuilder import patch_total_parts, rebuild_part
+from ..model.rebuilder import patch_parts_end, patch_total_parts, rebuild_part
 from ..model.strip import decode_strip
 
 
@@ -97,7 +97,7 @@ def _import(
     if len(obj.uvs) != len(obj.vertices):
         print(f"\nERRO: O .obj tem {len(obj.vertices)} vertices mas "
               f"{len(obj.uvs)} UVs. Cada vertice precisa ter exatamente 1 UV.")
-        print("No Blender: UV Editor > UV > Merge UVs by Distance.")
+        print("As faces nao referenciam UVs (formato f v/vt): reexporte o .obj com UVs.")
         sys.exit(1)
 
     counts_match = (len(obj.vertices) == total_v_template)
@@ -279,6 +279,12 @@ def _import(
             orig_parts_end, new_parts_end,
         )
         print(f"      Container pointers fixed: {patched}")
+        # Fim das parts no model header (+0x2C, relativo ao modelo) — face e
+        # trofeu. Gravado DEPOIS do patch_resize: a varredura dele compara com
+        # os valores do template e poderia re-patchar este se coincidisse.
+        new_payload = patch_parts_end(new_payload, template.offset_file_1, new_parts_end)
+        print(f"      Model header parts_end (rel.): "
+              f"0x{new_parts_end - template.offset_file_1:X}")
     else:
         print(f"      Parts with identical size — no pointers to fix")
 

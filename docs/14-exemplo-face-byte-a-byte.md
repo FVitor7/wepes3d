@@ -164,7 +164,7 @@ Os campos que o código usa (valores reais deste arquivo):
 | `byte[0x10]` | `03 00 FF FF` | **`MAGIC_MODEL`** | início do modelo |
 | `byte[0x30]` | `8` | **`total_parts`** | em `offset_file_1 + 0x20` = `0x10+0x20` |
 | `byte[0x34]` | `0x100` | `parts_start_rel` | onde a 1ª part começa (relativo) |
-| `byte[0x3C]` | `0x41B0` | **`parts_end − 16`** | 2º ponteiro (cópia em outro lugar) |
+| `byte[0x3C]` | `0x41B0` | **fim das parts (relativo)** | em `offset_file_1 + 0x2C`: `0x41C0 − 0x10` (ver [02 §2](02-anatomia-payload.md#por-que-parts_end-aparece-duas-vezes)) |
 
 `parse_model` lê `total_parts` (= 8) e o offset da 1ª part, e então fatia o payload:
 
@@ -369,7 +369,8 @@ newmtl material1
 ## 3. `import` (conversão): do `.obj` ao `.bin`
 
 `import` faz o caminho de volta **`.obj → .bin`** em **7 fases** (detalhe em
-[03 — Pipeline](03-pipeline.md)). Saída real ao reimportar o `face.obj` sem editar:
+[03 — Pipeline](03-pipeline.md)). Saída real (resumida) ao reimportar o `face.obj`
+sem editar:
 
 ```text
 [1/7] Loading face .bin template: examples/face.bin
@@ -379,15 +380,31 @@ newmtl material1
 [3/7] Calculating vertex distribution across parts...
       Contagem bate com template — usando distribuicao original.
 [4/7] Assigning triangles to parts...
-      Part 0: 130 faces ...
+      Part 0: 130 faces (triangles) ...
 [5/7] Preserving template normals...
 [6/7] Converting and rebuilding parts...
       Part 0: 87 v IDENTICA ao template — strip original preservado (zero-diff)
-      Part 2: 87 -> 87 v, size 2080 -> 2128 +48, 130 tris
+      ...                                                   (idem nas 8 parts)
+[7/7] Writing .bin...
+      Payload: 38464 bytes (the template had 38464)
+      Parts with identical size — no pointers to fix
+=== COMPLETED SUCCESSFULLY ===
+```
+
+Sem edição, **as 8 parts passam direto** (*passthrough*): nenhum byte do payload é
+recodificado. Para ver o rebuild em ação, mova o 1º vértice do `face.obj`
+(`v 0.000000 …` → `v 0.100000 …`) e reimporte — só a part dele muda:
+
+```text
+[6/7] Converting and rebuilding parts...
+      Part 0: 87 -> 87 v, size 2048 -> 2144 +96, 130 tris
+      Part 1: 87 v IDENTICA ao template — strip original preservado (zero-diff)
       ...
 [7/7] Writing .bin...
       Payload: 38560 bytes (the template had 38464)
-=== COMPLETED SUCCESSFULLY ===
+      Part sizes have changed: 0x41C0 -> 0x4220
+      Container pointers fixed: 2
+      Model header parts_end (rel.): 0x4210
 ```
 
 ### O que cada fase faz
@@ -404,8 +421,8 @@ flowchart TB
 
 ### Os "bytes derivados" que o `import` reescreve
 
-Quando uma part muda de tamanho (ex.: a Part 2 foi de 2.080 → 2.128 bytes), o
-código recalcula e regrava **vários campos de uma vez** — esquecer um quebra o
+Quando uma part muda de tamanho (ex.: a Part 0 editada foi de 2.048 → 2.144 bytes),
+o código recalcula e regrava **vários campos de uma vez** — esquecer um quebra o
 modelo no jogo. `rebuild_part` cuida dos campos da part:
 
 ```text
@@ -419,13 +436,10 @@ header[0x0C] = QWC        prologue[0x108] = vc
 ```
 
 Em seguida, o `importer` corrige os **ponteiros globais** no `pre_parts` (os
-`parts_end` que vimos na seção 2.2): como o payload cresceu de `0x41C0` para
-`0x4220`, ele soma o mesmo `Δ` em `byte[0x0C]` e em `byte[0x3C]`. A saída confirma:
-
-```text
-      Part sizes have changed: 0x41C0 -> 0x4220
-      Container pointers fixed: 2
-```
+`parts_end` que vimos na seção 2.2): como o fim das parts foi de `0x41C0` para
+`0x4220`, ele soma o mesmo `Δ` em `byte[0x0C]` (absoluto) e grava o fim **relativo
+ao modelo** em `byte[0x3C]` (`offset_file_1 + 0x2C` = `0x4220 − 0x10` = `0x4210`) —
+são as três últimas linhas da saída acima.
 
 > O **mapa completo** desses ~15 bytes, com fórmulas, está em
 > [02 §5](02-anatomia-payload.md#5-o-mapa-dos-bytes-que-você-precisa-gravar).
@@ -440,63 +454,58 @@ deste `examples/face.bin`:
 
 ```mermaid
 flowchart TB
-    subgraph N1["Nível 1 — payload (parse → write_model)"]
-        A1["38.464 B → 38.464 B<br/>BYTE-IDÊNTICO ✓"]
+    subgraph N1["Nível 1 — payload (.bin → .obj → .bin)"]
+        A1["38.464 B → 38.464 B<br/>BYTE-IDÊNTICO ✓ (8/8 parts em passthrough)"]
     end
-    subgraph N2["Nível 2 — geometria (.bin → .obj → .bin)"]
-        A2["todos os 696 vértices<br/>voltam ao MESMO int16 ✓"]
+    subgraph N2["Nível 2 — geometria (.obj reexportado)"]
+        A2["696 vértices, UVs e 984 faces<br/>IGUAIS ✓"]
     end
     subgraph N3["Nível 3 — o .bin comprimido (cmp dos arquivos)"]
-        A3["DIFERENTE ✗<br/>(zlib + 2 parts recodificadas)"]
+        A3["DIFERENTE ✗ neste arquivo<br/>(só o stream zlib)"]
     end
 ```
 
 | Nível | O que se compara | Resultado | Por quê |
 |---|---|---|---|
-| **1. Payload** | `parse_model` → `write_model` | **idêntico** | o parser/serializer não perde nada (38.464 = 38.464 bytes) |
-| **2. Geometria** | vértices/UVs/faces do `.obj` | **lossless** | o `CoordSpace` é uma bijeção (seção 2.4) |
-| **3. `.bin`** | `cmp arquivo_original arquivo_novo` | **diferente** | ver abaixo |
+| **1. Payload** | payload do template × payload da saída | **idêntico** | sem edição, todas as parts passam direto (o strip original é mantido) |
+| **2. Geometria** | linhas `v`/`vt`/`f` dos dois `.obj` | **idêntica** | o `CoordSpace` é uma bijeção (seção 2.4) |
+| **3. `.bin`** | `cmp arquivo_original arquivo_novo` | **difere** | só a compressão — ver abaixo |
 
-**Por que o Nível 3 (o `.bin` final) difere**, mesmo sem editar nada:
-
-1. **O `zlib` não reproduz os bytes do jogo.** O compressor do Python (nível 9) gera
-   um stream válido, mas **diferente** do que o PES gerou: aqui, 25.716 bytes contra
-   25.729 do original. Os dois descomprimem para o mesmo payload, mas os **bytes
-   comprimidos não batem**. Isso sozinho já faz `cmp` acusar diferença.
-2. **Duas parts são recodificadas.** No `face.bin`, 6 das 8 parts passam direto
-   (*passthrough*: o strip original é mantido byte a byte). As **parts 2 e 3** são
-   recodificadas porque dois decoders de strip internos contam os triângulos de
-   forma ligeiramente diferente (130 contra 131). A **geometria continua correta** —
-   só os bytes do strip mudam, e a part cresce 48 bytes.
+**Por que o Nível 3 (o `.bin` final) difere**, mesmo com o payload idêntico: o
+`import` recomprime com o zlib do Python (nível 9), que gera um stream válido mas
+**diferente** do que o PES gerou para este arquivo — aqui, 25.748 bytes contra
+25.761 do original. Os dois descomprimem para o mesmo payload; só os **bytes
+comprimidos** não batem. Em outros arquivos o zlib do Python reproduz o original e
+o `.bin` sai idêntico (é o caso do troféu de teste, `tests/seed/trophy.bin`).
 
 ```text
                      payload          .bin comprimido
 template (jogo)      38.464 B         25.761 B  (zlib do PES)
-saída (reimport)     38.560 B         ~25.8 KB  (zlib do Python)
-                     └ +96 B das        └ stream zlib diferente
-                       parts 2/3          → cmp sempre acusa
+saída (reimport)     38.464 B         25.748 B  (zlib do Python)
+                     └ idêntico        └ stream zlib diferente
 ```
 
-> ⚠ **Atenção a um exemplo de outras páginas.** O [03 §Validação](03-pipeline.md#validação-roundtrip)
-> e o [00 Receita 2](00-guia-de-uso.md#receita-2--reimportar-a-mesma-face-edição-leve)
-> sugerem `cmp face.bin rt.bin` esperando **zero-diff** no `.bin`. Pela medição
-> acima, **isso não acontece** para este `examples/face.bin` (os dois motivos
-> acima). O que é **garantido** é o **Nível 1** (payload) e o **Nível 2**
-> (geometria). Use a verificação abaixo.
+> Até a correção do [Bug 13](06-bugs-historicos.md#bug-13--triângulo-degenerado-no-decode_strip),
+> as parts 2 e 3 deste arquivo eram recodificadas sem necessidade (um triângulo
+> degenerado fazia o passthrough achar que tinham mudado) e o payload crescia 96 B.
 
 ### Como verificar o roundtrip de verdade
 
-Compare a **geometria** (Nível 2), não os bytes comprimidos:
+Compare o **payload** (Nível 1), não os bytes comprimidos:
 
 ```bash
 # 1. exporta o original
 python -m wepes3d export examples/face.bin a.obj --type face
 # 2. reimporta sem editar
 python -m wepes3d import examples/face.bin a.obj saida.bin --type face
-# 3. exporta a saída e compara os .obj (devem ter os MESMOS vértices/UVs/faces)
-python -m wepes3d export saida.bin b.obj --type face
-diff a.obj b.obj && echo "geometria identica ✓"
+# 3. compara os payloads descomprimidos
+python -c "from wepes3d import decompress_bin as d; print(d('examples/face.bin')[0] == d('saida.bin')[0])"
+# True
 ```
+
+Para a **geometria** (útil quando você editou o `.obj`), reexporte a saída e
+compare só as linhas `v`/`vt`/`f`: o comentário do topo e o `mtllib` levam o nome
+dos arquivos e sempre diferem.
 
 ---
 
@@ -533,8 +542,9 @@ flowchart LR
   `CoordSpace` para virar `.obj`. **Cada número desta página foi conferido** contra
   o `.obj` gerado.
 - `import` reescreve **~15 campos derivados** por part + os ponteiros globais.
-- "Idêntico" tem 3 níveis: **payload** (byte-idêntico), **geometria** (lossless) e o
-  **`.bin` comprimido** (difere, por causa do zlib e de 2 parts recodificadas).
+- "Idêntico" tem 3 níveis: **payload** (byte-idêntico no roundtrip), **geometria**
+  (lossless) e o **`.bin` comprimido** (idêntico só quando o zlib do Python reproduz
+  o do jogo — não é o caso deste arquivo).
 
 Próximos passos: [02 — Anatomia](02-anatomia-payload.md) (o mapa de campos) ·
 [03 — Pipeline](03-pipeline.md) (as 7 fases) · [05 — Strip](05-strip-encoding.md).

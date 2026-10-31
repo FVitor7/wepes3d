@@ -1,11 +1,13 @@
 """Import .obj -> .bin: roundtrip, estratégias de partição e erros."""
 
 import pathlib
+import struct
 
 import pytest
 
 from wepes3d import (
-    decompress_bin, parse_model, import_face, import_trophy, export_trophy,
+    compress_bin, decompress_bin, parse_model, import_face, import_trophy,
+    export_trophy, trophy_section_offsets,
 )
 
 
@@ -26,6 +28,8 @@ def test_import_roundtrip_face(face_bin, face_obj, tmp_path):
     assert out.exists()
     # a geometria é preservada (696 vértices, 8 parts)
     assert _vcount(str(out)) == 696
+    # sem edição, as 8 parts passam direto (passthrough): payload byte-idêntico
+    assert decompress_bin(str(out))[0] == decompress_bin(face_bin)[0]
 
 
 def test_import_edited_vertex_recodes_one_part(face_bin, face_obj, tmp_path):
@@ -45,7 +49,9 @@ def test_import_edited_vertex_recodes_one_part(face_bin, face_obj, tmp_path):
 
 def test_import_strip_mode_list(face_bin, face_obj, tmp_path):
     out = tmp_path / "list.bin"
-    import_face(face_bin, face_obj, str(out), strip_mode="list")
+    # preserve_strips=False: sem edição, o passthrough manteria os strips do
+    # jogo e nenhuma part seria codificada em modo list.
+    import_face(face_bin, face_obj, str(out), strip_mode="list", preserve_strips=False)
     assert _vcount(str(out)) == 696
 
 
@@ -121,7 +127,47 @@ def test_import_trophy_roundtrip(trophy_bin, tmp_path):
     export_trophy(trophy_bin, str(obj), section=0)
     out = tmp_path / "t_rt.bin"
     import_trophy(trophy_bin, str(obj), str(out), section=0)
-    assert out.exists()
+    # sem edição, as 14 parts passam direto: payload byte-idêntico
+    assert decompress_bin(str(out))[0] == decompress_bin(trophy_bin)[0]
+
+
+# ---------------------------------------------------------------------------
+# Fim das parts no model header (model+0x2C, relativo ao modelo)
+# ---------------------------------------------------------------------------
+
+def _parts_end_rel_ok(payload, model_offset):
+    m = parse_model(payload, model_offset)
+    parts_end = len(m.pre_parts_bytes) + sum(p.size for p in m.parts)
+    return struct.unpack_from("<I", payload, model_offset + 0x2C)[0] == parts_end - model_offset
+
+
+def test_import_trophy_recount_updates_parts_end(trophy_bin, grid_obj, tmp_path):
+    out = tmp_path / "t_recount.bin"
+    import_trophy(trophy_bin, grid_obj(8), str(out), section=0,
+                  allow_recount=True, recalculate_normals=True, auto_fit=True)
+    template, _, _ = decompress_bin(trophy_bin)
+    payload, _, _ = decompress_bin(str(out))
+    secs = trophy_section_offsets(payload)
+    assert secs[1] != trophy_section_offsets(template)[1]     # sec0 mudou de tamanho
+    assert all(_parts_end_rel_ok(payload, off) for off in secs)
+
+
+def test_import_face_model_at_0x20_updates_parts_end(face_bin, grid_obj, tmp_path):
+    # face.bin com o modelo movido de 0x10 para 0x20 (layout de h2/face_1): o
+    # fim das parts em model+0x2C deixa de coincidir com `parts_end - 16`.
+    payload, outer, trailing = decompress_bin(face_bin)
+    moved = bytearray(payload[:0x10] + bytes(16) + payload[0x10:])
+    struct.pack_into("<I", moved, 0x08, 0x20)                      # offset_file_1
+    parts_end = struct.unpack_from("<I", moved, 0x0C)[0]
+    struct.pack_into("<I", moved, 0x0C, parts_end + 16)            # parts_end absoluto
+    assert _parts_end_rel_ok(bytes(moved), 0x20)
+    template = tmp_path / "face_0x20.bin"
+    compress_bin(bytes(moved), outer, trailing, str(template))
+
+    out = tmp_path / "f_recount.bin"
+    import_face(str(template), grid_obj(8), str(out),
+                allow_recount=True, recalculate_normals=True, auto_fit=True)
+    assert _parts_end_rel_ok(decompress_bin(str(out))[0], 0x20)
 
 
 # ---------------------------------------------------------------------------

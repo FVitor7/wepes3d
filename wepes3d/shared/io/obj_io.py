@@ -10,10 +10,12 @@ Formato minimo suportado:
   f a/b/c d/e/f g/h/i   (triangulo com 3 indices 1-based)
   f a d g       (triangulo com so indices de vertice)
 
-PRE-CONDICOES IMPORTANTES:
-  - 1 UV por vertice (sem UV seams / split). Se o arquivo tem mais UVs que
-    vertices, o pipeline detecta e aborta com mensagem clara explicando como
-    resolver no Blender ("Merge UVs by Distance").
+1 UV POR VERTICE (o pipeline exige):
+  - Quando as faces usam indices de v e vt diferentes (export do Blender, UV
+    seams), cada par (v, vt) unico vira um vertice — duplicado nos seams.
+    Arquivos ja alinhados (v == vt, como os do export) passam intactos.
+  - Se as faces nao referenciam vt e o numero de UVs difere do de vertices,
+    o pipeline aborta com mensagem clara (reexportar o .obj com UVs).
 
 TRIANGULACAO AUTOMATICA:
   - Faces com >3 vertices sao automaticamente trianguladas via FAN
@@ -24,9 +26,8 @@ TRIANGULACAO AUTOMATICA:
     sobrepostos — triangule no Blender (Mesh > Triangulate Faces) primeiro.
 
 CONVERSAO 1 UV POR VERTICE (`convert_obj_to_vertex_uv`):
-  - Reescreve um .obj cujas faces usam indices de v e vt diferentes (caso
-    tipico do export do Blender) no formato `f i/i`: cada par (v, vt) unico
-    vira um vertice.
+  - Grava em disco o mesmo alinhamento que o `parse_obj` faz na leitura, no
+    formato `f i/i` — util para conferir no Blender o que o import enxerga.
 """
 
 from dataclasses import dataclass
@@ -55,10 +56,13 @@ def parse_obj(filepath: str) -> ObjMesh:
     Grupos: linhas 'g NOME' ou 'o NOME' iniciam um novo grupo. Cada `f`
     subsequente eh associado a esse grupo. Util para `--use-groups` que
     mapeia 1 grupo do .obj -> 1 part do PS2.
+
+    UVs: segue o indice `vt` de cada canto da face (ver `_unify_vertex_uv`) —
+    antes o UV era tomado pela posicao do vertice, o que embaralhava as UVs
+    de .obj exportados do Blender.
     """
     vertices, uvs, polygons, poly_groups, group_names = _read_obj(filepath)
-    # So o indice do vertice: assume o UV na mesma posicao (vt == v).
-    polygons = [[v for v, _ in poly] for poly in polygons]
+    vertices, uvs, polygons = _unify_vertex_uv(vertices, uvs, polygons)
 
     faces: List[Tuple[int, int, int]] = []
     face_groups: List[int] = []
@@ -90,12 +94,13 @@ def parse_obj(filepath: str) -> ObjMesh:
 def convert_obj_to_vertex_uv(input_path: str, output_path: str) -> None:
     """
     Reescreve um .obj com 1 UV por vertice: cada par (v, vt) unico vira um
-    vertice e as faces passam a usar o MESMO indice para v e vt (`f i/i`) —
-    o formato que o import espera.
+    vertice e as faces passam a usar o MESMO indice para v e vt (`f i/i`).
 
-    Util para .obj exportados do Blender, onde os indices de v e vt das faces
-    nao batem. Preserva grupos (`o`/`g`) e poligonos (nao triangula); descarta
-    normais e materiais. Um .obj ja alinhado sai com os vertices na mesma ordem.
+    O import ja faz esse alinhamento na leitura (`parse_obj`); esta funcao o
+    grava em disco — util para conferir no Blender o que o import enxerga ou
+    para ferramentas que exigem v e vt alinhados. Preserva grupos (`o`/`g`) e
+    poligonos (nao triangula); descarta normais e materiais. Um .obj ja
+    alinhado sai com os vertices na mesma ordem.
     """
     vertices, uvs, polygons, poly_groups, group_names = _read_obj(input_path)
     if not uvs:

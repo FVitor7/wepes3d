@@ -51,8 +51,12 @@ Parser minimalista que aceita `v`, `vt`, `vn` (ignoradas — recalculamos),
 
 **Pré-condições críticas:**
 
-- `len(vertices) == len(uvs)`. Se diferir, abortamos com mensagem clara sobre
-  `Merge UVs by Distance` no Blender.
+- **1 UV por vértice.** O parser segue o índice `vt` de cada canto da face: se as
+  faces usam índices de `v` e `vt` diferentes (export do Blender, *seams* de UV),
+  cada par `(v, vt)` único vira um vértice — duplicado nos seams. `.obj` já
+  alinhados (como os do export) passam intactos. Só se as faces **não**
+  referenciam `vt` e a contagem de UVs difere da de vértices é que abortamos,
+  pedindo para reexportar o `.obj` com UVs.
 - **Faces com >3 vértices são trianguladas por leque** automaticamente (quad
   `f a b c d` → `(a,b,c)` + `(a,c,d)`). Funciona para polígonos convexos; côncavos
   devem ser triangulados no Blender antes.
@@ -176,15 +180,18 @@ desliga e recodifica tudo.
 flowchart TB
     P1["total_parts (offset_file_1 + 0x20), se mudou"] --> P2
     P2["parts_end mudou?"] -->|sim| P3["patch defensivo no pre_parts:<br/>byte == parts_end → +Δ ; byte == parts_end−16 → +Δ"]
+    P3 --> P3B["model header: offset_file_1 + 0x2C<br/>= parts_end − offset_file_1"]
     P2 -->|não| P4
-    P3 --> P4["zlib(payload, 9) + outer_header (tamanhos) + trailing"]
+    P3B --> P4["zlib(payload, 9) + outer_header (tamanhos) + trailing"]
     P4 --> OUT[".bin"]
 ```
 
 O patch dos ponteiros é **defensivo** (varre o `pre_parts` procurando qualquer
-uint32 que valha `parts_end` ou `parts_end − 16`) — pega ambos os ponteiros
-conhecidos e qualquer outro relacionado. Para troféus, há um patch adicional do
-diretório de seções (ver [08 §4](08-trofeus.md)).
+uint32 que valha `parts_end` ou `parts_end − 16`) — pega os ponteiros absolutos
+e qualquer outro relacionado. Para troféus, há um patch adicional do diretório de
+seções (ver [08 §4](08-trofeus.md)). Em seguida, para face e troféu, o fim das parts
+**relativo ao modelo** (`offset_file_1 + 0x2C`) é gravado explicitamente — a
+varredura só o pegava quando o modelo começa em `0x10` ([Bug 14](06-bugs-historicos.md#bug-14--fim-das-parts-relativo-ao-modelo)).
 
 ---
 
@@ -194,30 +201,34 @@ diretório de seções (ver [08 §4](08-trofeus.md)).
 flowchart LR
     BIN["template.bin"] -->|export| OBJ["template.obj"]
     OBJ -->|"import (sem editar)"| RT["rt.bin"]
-    RT -. "byte-idêntico?" .-> BIN
+    RT -. "payload byte-idêntico?" .-> BIN
 ```
 
 Há **dois níveis** de roundtrip, e a diferença é importante:
 
 | Cenário | Resultado |
 |---|---|
-| `.obj` reproduz **exatamente** o template (não editado) | **zero-diff** — o passthrough preserva o strip original; `rt.bin` é byte-idêntico a `template.bin`. |
+| `.obj` reproduz **exatamente** o template (não editado) | **zero-diff** — o passthrough preserva o strip original de todas as parts; o **payload** de `rt.bin` é byte-idêntico ao de `template.bin`. |
 | `.obj` com geometria **editada** (alguns vértices/triângulos mudam) | só as parts alteradas são recodificadas (strip `connected`); a **geometria** é preservada, os **bytes** das parts editadas mudam. |
 
-Teste prático (export → import sem editar → comparar):
+Teste prático (export → import sem editar → comparar o payload):
 
 ```bash
 python -m wepes3d export face.bin face.obj --type face
 python -m wepes3d import face.bin face.obj rt.bin --type face
-cmp face.bin rt.bin && echo "zero-diff ✓"
+python -c "from wepes3d import decompress_bin as d; print(d('face.bin')[0] == d('rt.bin')[0])"
+# True
 ```
 
-```python
-# valida que a GEOMETRIA sobrevive (mesmo quando os bytes mudam):
-from wepes3d import export_face
-export_face("rt.bin", "rt.obj")
-# compare rt.obj com face.obj — vértices/UVs/faces iguais
-```
+> **E o `.bin` comprimido?** O `import` recomprime com o zlib do Python (nível 9).
+> Quando ele reproduz a compressão do arquivo original, o `.bin` sai idêntico e
+> `cmp` passa — é o caso do troféu de teste (`tests/seed/trophy.bin`). Quando não
+> reproduz (`examples/face.bin`), só o stream comprimido difere; o payload é o
+> mesmo. Detalhes em [14 §4](14-exemplo-face-byte-a-byte.md#4-roundtrip-o-que-idêntico-significa-em-cada-camada).
+
+Para conferir a **geometria** de um `.obj` editado, reexporte o `rt.bin` e compare
+as linhas `v`/`vt`/`f` dos dois `.obj` (o comentário do topo e o `mtllib` levam o
+nome dos arquivos e sempre diferem).
 
 ---
 

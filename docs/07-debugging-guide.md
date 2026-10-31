@@ -32,7 +32,8 @@ flowchart TD
 | Crash **"unknown vifcmd"** | Bug 5 (IMMED errado); strip com NUM inválido |
 | Crash **"Vertex Trace: float overflow"** | Bug 2 (strip_indices_total); Bug 3 (vbe/ss/se) |
 | **DMA chain overrun** | Bug 1 (QWC errado) |
-| Editor da comunidade não abre o `.bin` | Bug 4 (ponteiro `parts_end − 16`) |
+| Editor da comunidade não abre o `.bin` | Bug 4 / Bug 14 (fim das parts no model header, `offset_file_1 + 0x2C`) |
+| **Textura embaralhada** numa malha vinda do Blender | Bug 15 (UVs pela posição do vértice — corrigido; atualize o pacote) |
 
 Cada bug está detalhado em [06 — Bugs históricos](06-bugs-historicos.md).
 
@@ -43,16 +44,19 @@ Cada bug está detalhado em [06 — Bugs históricos](06-bugs-historicos.md).
 ### 1. Confirme o roundtrip primeiro
 
 Se o pipeline está íntegro, exportar e reimportar **sem editar** deve dar zero-diff
-(o passthrough preserva o strip — ver [03 §Validação](03-pipeline.md#validação-roundtrip)):
+no **payload** (o passthrough preserva o strip — ver [03 §Validação](03-pipeline.md#validação-roundtrip)):
 
 ```bash
 python -m wepes3d export face.bin face.obj --type face
 python -m wepes3d import face.bin face.obj rt.bin --type face
-cmp face.bin rt.bin && echo "zero-diff ✓ (pipeline íntegro)"
+python -c "from wepes3d import decompress_bin as d; print(d('face.bin')[0] == d('rt.bin')[0])"
+# True = pipeline íntegro
 ```
 
-Se **não** der zero-diff num roundtrip sem edição, há algo errado no parser/encoder —
-investigue antes de mexer na sua malha.
+O log do `import` deve mostrar **todas** as parts como `IDENTICA ao template`. Se
+**não** der zero-diff num roundtrip sem edição, há algo errado no parser/encoder —
+investigue antes de mexer na sua malha. (Comparar o `.bin` com `cmp` não serve
+de teste: o stream zlib pode diferir mesmo com o payload idêntico.)
 
 ### 2. Leia o output do `import`
 
@@ -80,15 +84,15 @@ of1         = struct.unpack_from("<I", payload, 8)[0]
 byte_04     = struct.unpack_from("<I", payload, 4)[0]
 total_parts = struct.unpack_from("<I", payload, of1 + 0x20)[0]
 parts_end   = struct.unpack_from("<I", payload, 0x0C)[0]
-ptr_3c      = struct.unpack_from("<I", payload, 0x3C)[0]
+end_rel     = struct.unpack_from("<I", payload, of1 + 0x2C)[0]
 
 print(f"byte[0x04]   = {byte_04}        (esperado: 8)")
 print(f"total_parts  = {total_parts}    (esperado: <= 8 em face)")
 print(f"parts_end    = 0x{parts_end:X}")
-print(f"ptr[0x3C]    = 0x{ptr_3c:X}     (esperado: parts_end - 16 = 0x{parts_end-16:X})")
+print(f"model+0x2C   = 0x{end_rel:X}    (esperado: parts_end - offset_file_1 = 0x{parts_end-of1:X})")
 
-assert byte_04 == 8,             "byte[0x04] mudado → invisibilidade garantida!"
-assert ptr_3c == parts_end - 16, "ptr[0x3C] desatualizado (Bug 4)!"
+assert byte_04 == 8,                "byte[0x04] mudado → invisibilidade garantida!"
+assert end_rel == parts_end - of1,  "fim das parts no model header desatualizado (Bug 4/14)!"
 print("OK ✓")
 ```
 
@@ -96,7 +100,7 @@ print("OK ✓")
 
 Pegue um `.bin` que funciona no jogo e compare o `pre_parts` campo a campo
 (use `decompress_bin` nos dois). Diferenças fora dos campos esperados
-(`parts_end`, `total_parts`, `byte[0x3C]`) são suspeitas.
+(`parts_end`, `total_parts`, `offset_file_1 + 0x2C`) são suspeitas.
 
 ---
 
@@ -104,13 +108,15 @@ Pegue um `.bin` que funciona no jogo e compare o `pre_parts` campo a campo
 
 ```mermaid
 flowchart LR
-    E1["'X vertices mas Y UVs'"] --> F1["UV → Merge UVs by Distance"]
+    E1["'X vertices mas Y UVs'"] --> F1["reexporte com UVs<br/>(faces f v/vt)"]
     E2["'triângulo cruza fronteira de parts'"] --> F2["adicione --allow-recount"]
     E3["'--max-verts-per-part requer >8 parts'"] --> F3["remova a flag, aumente o valor,<br/>ou decime mais"]
 ```
 
-- **"O .obj tem X vertices mas Y UVs"** → UV *seams*. No UV Editor: `Select All` →
-  `UV → Merge UVs by Distance` (threshold ~0.0001) → reexporte.
+- **"O .obj tem X vertices mas Y UVs"** → as faces não referenciam `vt` (`f 1 2 3`)
+  e a contagem de UVs difere da de vértices. Reexporte **com UVs**; se as faces
+  referenciam `vt`, seams são resolvidos sozinhos (o vértice é duplicado). Para
+  economizar vértices: `Select All` → `UV → Merge UVs by Distance` (threshold ~0.0001).
 - **"Triângulo X cruza fronteira de parts"** → adicione `--allow-recount` (deixa o
   particionamento automático cuidar das fronteiras).
 - **"--max-verts-per-part X requer Y parts, mas o máximo é 8"** → remova a flag

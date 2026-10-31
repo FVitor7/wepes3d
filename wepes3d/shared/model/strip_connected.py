@@ -354,6 +354,6 @@ def _measure(template_path: str, obj_path: str) -> None:
 if __name__ == "__main__":
     import sys
     if len(sys.argv) != 3:
-        print("uso: python -m pes_ps2_new_model.strip_connected TEMPLATE.bin MESH.obj")
+        print("uso: python -m wepes3d.shared.model.strip_connected TEMPLATE.bin MESH.obj")
         sys.exit(1)
     _measure(sys.argv[1], sys.argv[2])
