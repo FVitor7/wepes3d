@@ -1,14 +1,14 @@
-# 05 — Encoding do triangle strip
+# 05 — Triangle strip encoding
 
-Como triângulos são codificados como uma sequência de índices `int16`, e por que o
-padrão é *triangle strip* **conectado** (com *triangle list* disponível como modo
-legado).
+How triangles are encoded as a sequence of `int16` indices, and why the
+default is the **connected** *triangle strip* (with the *triangle list* still
+available as a legacy mode).
 
 ---
 
-## 1. O formato bruto
+## 1. The raw format
 
-O strip data é uma sequência de **int16** (little-endian). Cada índice:
+The strip data is a sequence of **int16** values (little-endian). Each index:
 
 ```
  15  14                              0
@@ -17,140 +17,148 @@ O strip data é uma sequência de **int16** (little-endian). Cada índice:
 └───┴─────────────────────────────────┘
 ```
 
-- **Bit 15 = ADC** (Address Don't Connect / restart): se 1, o vértice entra na fila
-  **sem** disparar triângulo.
-- **Bits 0..14**: o índice do vértice local, codificado como `(idx + 1) × 4`.
+- **Bit 15 = ADC** (Address Don't Connect / restart): if it is 1, the vertex
+  enters the queue **without** firing a triangle.
+- **Bits 0..14**: the local vertex index, encoded as `(idx + 1) × 4`.
 
-### Por que `(idx + 1) × 4`?
+### Why `(idx + 1) × 4`?
 
-- O **`+1`** evita o valor 0 (sentinela/padding).
-- O **`×4`** alinha com o **stride do layout interleaved** na VU (cada vértice
-  ocupa 4 qwords — ver [04 §3](04-vu-microcode.md)).
+- The **`+1`** avoids the value 0 (sentinel/padding).
+- The **`×4`** matches the **stride of the interleaved layout** in the VU (each
+  vertex uses 4 qwords — see [04 §3](04-vif-and-vu1.md#3-stcycl-the-secret-of-the-interleaved-layout)).
 
 ---
 
-## 2. O decoder da VU1: janela deslizante de 3
+## 2. The VU1 decoder: a sliding window of 3
 
-O microcode mantém uma janela de 3 índices `[a, b, c]`. A cada novo índice, decide:
+The microcode keeps a window of 3 indices `[a, b, c]`. For each new index it
+decides:
 
 ```mermaid
 flowchart TD
-    N["novo índice c"] --> Q{"c.ADC == 1?"}
-    Q -->|sim| PUSH["push na fila<br/>(NÃO dispara)"]
-    Q -->|não| TRIG["dispara triângulo<br/>(a, b, c) + push"]
+    N["new index c"] --> Q{"c.ADC == 1?"}
+    Q -->|yes| PUSH["push into the queue<br/>(does NOT fire)"]
+    Q -->|no| TRIG["fires the triangle<br/>(a, b, c) + push"]
 ```
 
-Há 3 padrões ("casos"):
+There are 3 patterns ("cases"):
 
-| Caso | Índices | Ação |
+| Case | Indices | Action |
 |---|---|---|
-| **1** `[neg, neg, pos]` | 2 restarts + 1 | dispara 1 triângulo `(v0,v1,v2)` — strip isolado |
-| **2** `[neg, pos, pos]` | 1 restart no meio | transição entre strips conectados |
-| **3** `[pos, pos, pos]` | continuação | cada novo índice dispara 1 triângulo com os 2 anteriores |
+| **1** `[neg, neg, pos]` | 2 restarts + 1 | fires 1 triangle `(v0,v1,v2)` — an isolated strip |
+| **2** `[neg, pos, pos]` | 1 restart in the middle | transition between connected strips |
+| **3** `[pos, pos, pos]` | continuation | each new index fires 1 triangle with the 2 previous ones |
 
-### Eficiência
+### Efficiency
 
-- **Strip conectado**: ~N+2 índices para N triângulos.
-- **Triangle list (caso 1 puro)**: 3N índices para N triângulos.
+- **Connected strip**: ~N+2 indices for N triangles.
+- **Triangle list (pure case 1)**: 3N indices for N triangles.
 
-Strip economiza ~3× em bytes.
+A strip saves ~3× in bytes.
 
 ---
 
-## 3. O winding em strips (o ponto que custou caro)
+## 3. Winding in strips (the point that cost the most)
 
-Para um triângulo `(a,b,c)`, o **winding** (ordem horária/anti-horária) decide se o
-back-face culling o mantém ou descarta. Em *triangle strips*, o winding **alterna**
-naturalmente a cada triângulo:
+For a triangle `(a,b,c)`, the **winding** (clockwise/counter-clockwise order)
+decides if back-face culling keeps it or drops it. In *triangle strips*, the
+winding naturally **alternates** from one triangle to the next:
 
 ```mermaid
 flowchart LR
     T0["T0  W"] --- T1["T1  −W"] --- T2["T2  W"] --- T3["T3  −W"]
 ```
 
-> 🔬 **Fato validado in-game.** O GS do PS2 (primitiva `triangle_strip`) **flipa o
-> winding automaticamente** a cada triângulo, como as GPUs de PC. Prova: o
-> `face.bin` original, decodificado *sem* flip, tem winding alternado (só ~51%
-> front-facing) e mesmo assim renderiza perfeito — só funciona se o GS flipa.
-> Confirmado depois no PCSX2 com um `.bin` de strips conectados (ver [04 §6](04-vu-microcode.md#6-backface-culling-e-winding-revisado--o-gs-faz-flip)).
+> 🔬 **Fact checked in the game.** The PS2 GS (`triangle_strip` primitive)
+> **flips the winding automatically** for each triangle, like PC GPUs. Proof:
+> the original `face.bin`, decoded *without* a flip, has an alternating
+> winding (only ~51% of the triangles face forward) and still draws perfectly
+> — that only works if the GS flips. This was later confirmed in PCSX2 with a
+> `.bin` made of our connected strips. (An old version of these docs said the
+> GS does **not** flip; that was wrong.)
 
-### Então por que um strip ingênuo produz buracos?
+### So why does a naive strip create holes?
 
-Não é o hardware. São dois motivos reais:
+It is not the hardware. There are two real reasons:
 
-1. **A malha de entrada não é coerentemente orientada.** `.obj` da comunidade tem
-   só **18–32%** das arestas internas com winding consistente. Tristrip só encadeia
-   em malha coerente.
-2. **Um greedy ingênuo ignora a paridade.** Estender o strip sem checar se a
-   posição (par/ímpar) bate com o winding desejado quebra a alternância.
+1. **The input mesh is not coherently oriented.** Community `.obj` files have
+   only **18–32%** of the inner edges with a consistent winding. A tristrip can
+   only keep going on a coherent mesh.
+2. **A naive greedy algorithm ignores parity.** Extending the strip without
+   checking if the position (even/odd) matches the wanted winding breaks the
+   alternation.
 
-**A peça que faltava:** *orientar a malha (flood-fill) ANTES de stripificar* e
-*encerrar o strip (restart) quando a paridade daria winding errado*.
+**The missing piece:** *orient the mesh (flood-fill) BEFORE making the strips*
+and *end the strip (restart) when the parity would give the wrong winding*.
 
 ---
 
-## 4. Modo padrão: `connected` (strips conectados)
+## 4. Default mode: `connected` (connected strips)
 
 ```mermaid
 flowchart LR
-    M[".obj triângulos"] --> O["orient_for_front<br/>(flood-fill: orienta coerente)"]
-    O --> G["greedy winding-aware<br/>(estende; restart se paridade errar)"]
-    G --> I["índices int16 (V4-16)"]
+    M[".obj triangles"] --> O["orient_for_front<br/>(flood-fill: coherent orientation)"]
+    O --> G["winding-aware greedy<br/>(extends; restarts if the parity is wrong)"]
+    G --> I["int16 indices (V4-16)"]
 ```
 
-Implementado em `shared/model/strip_connected.py` (orientação + encoder) e acionado
-pelo `rebuild_part(strip_mode="connected")` (default). **Geometria preservada e
-winding correto por construção** (verificado por `verify()`).
+Implemented in `shared/model/strip_connected.py` (orientation + encoder) and
+used by `rebuild_part(strip_mode="connected")` (the default). **Geometry kept
+and correct winding by construction** (checked by `verify()`).
 
-### Resultado medido (897 triângulos, 8 parts)
+### Measured result (897 triangles, 8 parts)
 
-| | índices | redução |
+| | indices | reduction |
 |---|---|---|
 | triangle list | 2692 | — |
-| **tristrip conectado** | **1736** | **−35,5%** |
+| **connected tristrip** | **1736** | **−35.5%** |
 
-Média ~2,2 triângulos/strip — baixa porque malhas low-poly decimadas + partição em
-ilhas fragmentam a conectividade. O ganho no `.bin` final é modesto (~2–5% após
-zlib, pois o strip é ~13% do payload), mas é o formato **nativo** do jogo.
+About 2.2 triangles per strip on average — low, because decimated low-poly
+meshes and the split into islands break the connectivity. The gain in the
+final `.bin` is small (~2–5% after zlib, since the strip is ~13% of the
+payload), but it is the game's **native** format.
 
 ---
 
-## 5. Modo legado: `list` (triangle list)
+## 5. Legacy mode: `list` (triangle list)
 
-Cada triângulo é seu próprio segmento isolado (caso 1 puro):
+Each triangle is its own isolated segment (pure case 1):
 
 ```python
 # shared/model/strip.triangles_to_pes_strip
-Triangulo (a, b, c)  →  [neg(a), neg(c), pos(b)]   # flip de winding (a,b,c)→(a,c,b)
+Triangle (a, b, c)  →  [neg(a), neg(c), pos(b)]   # winding flip (a,b,c)→(a,c,b)
 
-def encode_neg(v): return ((v + 1) * 4 | 0x8000) - 0x10000   # int16 negativo
-def encode_pos(v): return  (v + 1) * 4                       # int16 positivo
+def encode_neg(v): return ((v + 1) * 4 | 0x8000) - 0x10000   # negative int16
+def encode_pos(v): return  (v + 1) * 4                       # positive int16
 ```
 
-O flip `(a,b,c)→(a,c,b)` compensa a inversão de X dos vértices ([Bug 8](06-bugs-historicos.md#bug-8--winding-dos-triângulos-invertido)).
+The `(a,b,c)→(a,c,b)` flip compensates for the X flip of the vertices
+([Bug 8](06-bug-history.md#bug-8--reversed-triangle-winding)).
 
-**Vantagens:** robusto (independe da orientação da malha), correção garantida sem
-suposições. **Custo:** 3 índices/triângulo → `strip_NUM = ceil(3N/4)` → limite
-**~340 triângulos/part** (`strip_NUM ≤ 255`).
+**Advantages:** robust (it does not depend on the mesh orientation), correct
+with no assumptions. **Cost:** 3 indices/triangle → `strip_NUM = ceil(3N/4)` →
+limit of **~340 triangles/part** (`strip_NUM ≤ 255`).
 
-Use com `--strip-mode list`:
+Use it with `--strip-mode list`:
 
 ```bash
-python -m wepes3d import face.bin meu.obj list.bin \
+python -m wepes3d import face.bin my.obj list.bin \
     --allow-recount --recalculate-normals --auto-fit --strip-mode list
 ```
 
-> Compare os dois no emulador: gere `strip.bin` (default connected) e `list.bin`
-> (`--strip-mode list`) do mesmo `.obj` — geometria idêntica, só o strip difere.
+> Compare both in the emulator: create `strip.bin` (default, connected) and
+> `list.bin` (`--strip-mode list`) from the same `.obj` — the geometry is
+> identical, only the strip differs.
 
 ---
 
-## 6. Padding e preservação de tamanho
+## 6. Padding and keeping the size
 
-### Alinhamento V4-16
+### V4-16 alignment
 
-Cada elemento V4-16 = 4 índices = 8 bytes. O total de índices deve ser múltiplo de
-4; pad com `-32768` (`0x8000` = só bit ADC → no-op seguro):
+Each V4-16 element = 4 indices = 8 bytes. The total number of indices must be
+a multiple of 4; the padding is `-32768` (`0x8000` = only the ADC bit → a safe
+no-op):
 
 ```python
 def align_strip_to_v4(indices):
@@ -158,18 +166,19 @@ def align_strip_to_v4(indices):
     return indices if rem == 0 else indices + [-32768] * (4 - rem)
 ```
 
-### Preservação de `part_size` (roundtrip)
+### Keeping `part_size` (roundtrip)
 
-Quando `vc` não muda, o strip é paddeado com `-32768` até o tamanho do template,
-mantendo `part_size` idêntico — assim os ponteiros absolutos do `pre_parts` nem
-precisam de patch. É a base do [zero-diff](03-pipeline.md#validação-roundtrip)
-junto com o passthrough.
+When `vc` does not change, the strip is padded with `-32768` up to the
+template size, so `part_size` stays the same — then the absolute pointers in
+`pre_parts` do not even need a patch. Together with the passthrough, this is
+the base of the [zero-diff roundtrip](03-import-pipeline.md#validation-roundtrip).
 
 ---
 
-## 7. Apêndice: auditar o encoding
+## 7. Appendix: checking the encoding
 
-`shared/model/strip.decode_strip` replica o decoder oficial — útil para conferir:
+`shared/model/strip.decode_strip` copies the official decoder — useful to
+check things:
 
 ```python
 from wepes3d.shared.model.strip import (
@@ -179,15 +188,15 @@ from wepes3d.shared.model.strip import (
 original = [(0, 1, 2), (0, 2, 3), (1, 4, 5)]
 encoded  = align_strip_to_v4(triangles_to_pes_strip(original))
 decoded  = decode_strip(encoded, vc=10)
-print(decoded)   # [(0, 2, 1), (0, 3, 2), (1, 5, 4)]  ← com flip de winding
+print(decoded)   # [(0, 2, 1), (0, 3, 2), (1, 5, 4)]  ← with the winding flip
 ```
 
-O flip é intencional: após o X-flip implícito no rendering, o winding final é o
-desejado.
+The flip is on purpose: after the implicit X flip at render time, the final
+winding is the one we want.
 
 ---
 
-## Próximo: bugs históricos
+## Next: bug history
 
-[06 — Bugs históricos](06-bugs-historicos.md): como cada bug do encoding foi
-descoberto e diagnosticado.
+[06 — Bug history](06-bug-history.md): how each bug of the format was found
+and diagnosed.
