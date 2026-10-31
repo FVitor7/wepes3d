@@ -1,12 +1,12 @@
 """
-CoordSpace: conversores int16<->float de um asset (shared).
+CoordSpace: int16<->float converters of an asset (shared).
 
-O bloco de geometria (vertices/normais/UVs int16) tem layout IDENTICO entre
-face e trofeu; muda so a CONVENCAO de eixos/escala. Cada asset constroi seu
-`CoordSpace` em `faces/profile.py` / `trophy/profile.py`. Aqui ficam:
+The geometry block (int16 vertices/normals/UVs) has the SAME layout in faces
+and trophies; only the axis/scale CONVENTION changes. Each asset builds its
+own `CoordSpace` in `adapters/pesweps2/<asset>/profile.py`. This module has:
 
-  - a dataclass CoordSpace (tipo);
-  - as conversoes de UV (iguais nos dois assets: V invertido).
+  - the CoordSpace dataclass (the type);
+  - the UV conversions (the same for every PS2 asset: V is flipped).
 """
 
 from dataclasses import dataclass
@@ -20,11 +20,11 @@ def clamp16(v: int) -> int:
 
 
 # ============================================================================
-# UV (igual para face e trofeu)
+# UV (the same for face and trophy)
 # ============================================================================
 
 def obj_to_int16_uv(u: float, v: float) -> Tuple[int, int]:
-    """OBJ (u,v) -> stored (iu, iv). Inverte V."""
+    """OBJ (u,v) -> stored (iu, iv). Flips V."""
     return (clamp16(round(u / UV_FACTOR)), clamp16(round((1.0 - v) / UV_FACTOR)))
 
 
@@ -39,7 +39,7 @@ def int16_to_obj_uv(u: int, v: int) -> Tuple[float, float]:
 
 @dataclass(frozen=True)
 class CoordSpace:
-    """Conversores int16<->float de um asset. obj = espaco Wavefront (Blender)."""
+    """int16<->float converters of an asset. obj = Wavefront space (Blender)."""
     name: str
     obj_to_int16_vertex: Callable[[float, float, float], Tuple[int, int, int]]
     int16_to_obj_vertex: Callable[[int, int, int], Tuple[float, float, float]]

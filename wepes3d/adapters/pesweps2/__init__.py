@@ -1,9 +1,9 @@
 """
-pesweps2 — adapters do PES/WE PlayStation 2 (int16, modelo 0300ffff, VIF).
+pesweps2 — PES/WE PlayStation 2 adapters (int16, 0300ffff model, VIF).
 
-Reexporta a API import_/export_ de cada tipo de asset PS2. FACE/TROFEU usam o
-motor importer/exporter de `shared/pipeline`; ESTADIO/KIT (so export) usam
-`shared/pipeline/folder` (pasta de modelos).
+Re-exports the import_/export_ API of each PS2 asset type. FACE/TROPHY use
+the importer/exporter engine of `shared/pipeline`; STADIUM/KIT (export only)
+use `shared/pipeline/folder` (model folder).
 """
 
 from .faces import import_face, export_face, FACE_PROFILE

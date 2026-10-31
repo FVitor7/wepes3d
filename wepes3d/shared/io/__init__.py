@@ -1,10 +1,10 @@
 """
-shared.io — entrada/saida de arquivo.
+shared.io — file input/output.
 
-  * bin_io      — compressao/descompressao do .bin do PES (zlib + header).
-  * pes_archive — "sistema de arquivos" PES (blocos comprimidos / containers).
-  * obj_io      — leitura de .obj (Wavefront) + conversao 1 UV por vertice.
-  * obj_write   — escrita de .obj (+ .mtl).
+  * bin_io      — compression/decompression of the PES .bin (zlib + header).
+  * pes_archive — PES "file system" (compressed blocks / containers).
+  * obj_io      — reading of .obj (Wavefront) + 1 UV per vertex conversion.
+  * obj_write   — writing of .obj (+ .mtl).
 """
 
 from .bin_io import decompress_bin, compress_bin, decompress_payload

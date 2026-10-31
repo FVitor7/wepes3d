@@ -1,17 +1,17 @@
 """
-Adapter de ESTADIO: o que difere de face/trofeu.
+STADIUM adapter: what is different from faces/trophies.
 
-- Coordenadas: factor = 1/256 = 0.00390625 (escala grande). stored (s0,s1,s2)
-  -> obj (s0, s2, -s1)  (deduzido do `stadium_modifier.py`:
+- Coordinates: factor = 1/256 = 0.00390625 (big scale). stored (s0,s1,s2)
+  -> obj (s0, s2, -s1)  (taken from `stadium_modifier.py`:
   `x,z,y = unpack(3h); v = (x*F, y*F, -z*F)`).
-- Navegacao: o payload descompactado e' uma "pasta" de sub-modelos: total em
-  [0], offset da tabela (TOC) em [4], e os offsets ABSOLUTOS de cada modelo
-  (`MAGIC_MODEL` 03 00 FF FF) a partir do TOC. (Um estadio tem 1..N modelos =
-  arquibancadas/quadrantes.) Ver `loader.py` para .str (bloco unico) vs .bin
-  (container 00 06 00 00 de varios blocos comprimidos).
-- max_parts: None (estadios tem ~120-150 parts por modelo).
+- Navigation: the decompressed payload is a "folder" of sub-models: the total
+  at [0], the offset of the table (TOC) at [4], and the ABSOLUTE offsets of
+  each model (`MAGIC_MODEL` 03 00 FF FF) from the TOC on. (A stadium has 1..N
+  models = stands/quadrants.) See `shared/io/pes_archive.py` for .str (single
+  block) vs .bin (00 06 00 00 container of several compressed blocks).
+- max_parts: None (stadiums have ~120-150 parts per model).
 
-Ver docs/09-estadios.md.
+See docs/09-stadiums-and-kits.md.
 """
 
 from typing import Tuple
@@ -22,11 +22,11 @@ from ....shared.pipeline import AssetProfile
 from ....shared.io import model_offsets
 
 STADIUM_VERTEX_FACTOR = 0.00390625
-"""1/256. Escala de estadio (muito maior que face/trofeu)."""
+"""1/256. Stadium scale (much bigger than faces/trophies)."""
 
 
 # ============================================================================
-# Coordenadas do estadio
+# Stadium coordinates
 # ============================================================================
 
 def int16_to_obj_vertex(s0: int, s1: int, s2: int) -> Tuple[float, float, float]:
@@ -36,13 +36,13 @@ def int16_to_obj_vertex(s0: int, s1: int, s2: int) -> Tuple[float, float, float]
 
 
 def obj_to_int16_vertex(x: float, y: float, z: float) -> Tuple[int, int, int]:
-    """OBJ (x,y,z) -> stored (x/f, -z/f, y/f) (inverso de int16_to_obj_vertex)."""
+    """OBJ (x,y,z) -> stored (x/f, -z/f, y/f) (inverse of int16_to_obj_vertex)."""
     f = STADIUM_VERTEX_FACTOR
     return (clamp16(round(x / f)), clamp16(round(-z / f)), clamp16(round(y / f)))
 
 
 def obj_to_int16_normal(nx: float, ny: float, nz: float) -> Tuple[int, int, int]:
-    """Normal unitaria -> int16, mesma permutacao de eixos dos vertices
+    """Unit normal -> int16, with the same axis order as the vertices
     (nx, -nz, ny)."""
     return (clamp16(round(nx * NORMAL_SCALE)),
             clamp16(round(-nz * NORMAL_SCALE)),
@@ -60,29 +60,30 @@ COORD = CoordSpace(
 
 
 # ============================================================================
-# Navegacao: "pasta" de sub-modelos (generica em shared.pes_archive)
+# Navigation: "folder" of sub-models (generic, in shared.io.pes_archive)
 # ============================================================================
 
 def locate(payload: bytes, section: int = 0) -> int:
-    """Offset do modelo `section` dentro do payload (bloco) descompactado."""
+    """Offset of the model `section` inside the decompressed payload (block)."""
     offs = model_offsets(payload)
     if not (0 <= section < len(offs)):
-        raise ValueError(f"modelo {section} inexistente ({len(offs)} modelos no bloco).")
+        raise ValueError(f"model {section} does not exist ({len(offs)} models in the block).")
     return offs[section]
 
 
 def patch_resize(payload: bytes, model_offset: int, pre_parts_size: int,
                  orig_parts_end: int, new_parts_end: int) -> Tuple[bytes, int]:
-    """Resize do estadio (import por partes) ainda nao implementado.
+    """Stadium resize (import by parts) is not implemented yet.
 
-    Para roundtrip de MESMO tamanho (delta == 0) e' no-op. Mudancas de tamanho
-    exigiriam deslizar a TOC + offsets dos modelos seguintes + (no .bin) a TOC do
-    container externo — sera adicionado quando o import por partes for feito."""
+    For a roundtrip of the SAME size (delta == 0) it does nothing. A change of
+    size would need to move the TOC + the offsets of the next models + (in the
+    .bin) the TOC of the outer container — it will be added together with the
+    import by parts."""
     if new_parts_end == orig_parts_end:
         return payload, 0
     raise NotImplementedError(
-        "resize de estadio (import com mudanca de contagem) ainda nao suportado; "
-        "use roundtrip de mesmo tamanho ou somente export por enquanto.")
+        "stadium resize (import with a different count) is not supported yet; "
+        "use a same-size roundtrip, or only export for now.")
 
 
 STADIUM_PROFILE = AssetProfile(

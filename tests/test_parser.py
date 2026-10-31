@@ -1,4 +1,4 @@
-"""Parser do payload: detecção, navegação, parse e serialização (lossless)."""
+"""Payload parser: detection, navigation, parsing and serialization (lossless)."""
 
 import struct
 
@@ -12,7 +12,7 @@ from wepes3d.shared.model.parser import (
 
 
 def _fake_payload(magic_at_8: bytes) -> bytes:
-    """payload mínimo: offset_file_1 = 0x20 e um magic arbitrário lá."""
+    """minimal payload: offset_file_1 = 0x20 and any magic there."""
     buf = bytearray(64)
     struct.pack_into("<I", buf, 8, 0x20)
     buf[0x20:0x24] = magic_at_8
@@ -36,7 +36,7 @@ def test_detect_unknown_raises():
 
 def test_locate_model_face(face_bin):
     payload, _, _ = decompress_bin(face_bin)
-    assert locate_model(payload) == 0x10            # face: modelo direto em payload[8]
+    assert locate_model(payload) == 0x10            # face: direct model at payload[8]
 
 
 def test_locate_model_trophy(trophy_bin):
@@ -66,7 +66,7 @@ def test_parse_face_structure(face_bin):
 def test_write_model_roundtrip_identical(face_bin):
     payload, _, _ = decompress_bin(face_bin)
     m = parse_model(payload)
-    assert write_model(m) == payload                # serializer é lossless
+    assert write_model(m) == payload                # the serializer is lossless
 
 
 def test_write_part_length(face_bin):
@@ -80,7 +80,7 @@ def test_clone_part_structure(face_bin):
     payload, _, _ = decompress_bin(face_bin)
     m = parse_model(payload)
     clone = clone_part_structure(m.parts[0])
-    assert clone.vertices == []                     # shell sem geometria
+    assert clone.vertices == []                     # empty shell, no geometry
     assert clone.header_bytes == m.parts[0].header_bytes
     assert clone.size == m.parts[0].size
 
@@ -90,4 +90,4 @@ def test_parse_trophy_section_explicit_offset(trophy_bin):
     off = locate_model(payload)
     m = parse_model(payload, off)
     assert len(m.parts) >= 1
-    assert write_model(m) == payload                # roundtrip do payload inteiro
+    assert write_model(m) == payload                # roundtrip of the whole payload

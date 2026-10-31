@@ -1,9 +1,9 @@
 """
-shared.geometry — matematica de espaco (asset-agnostica).
+shared.geometry — space math (asset-agnostic).
 
-  * coords    — CoordSpace (int16<->float por asset) + conversao de UV + clamp16.
-  * transform — bounding box, auto-fit (encaixa no bbox do template) e calculo
-                de normais por vertice.
+  * coords    — CoordSpace (int16<->float per asset) + UV conversion + clamp16.
+  * transform — bounding box, auto-fit (fits into the template bbox) and
+                per-vertex normals.
 """
 
 from .coords import (

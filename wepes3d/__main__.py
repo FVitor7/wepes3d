@@ -1,4 +1,4 @@
-"""Entrypoint para `python -m wepes3d`."""
+"""Entry point for `python -m wepes3d`."""
 
 from .cli import main
 

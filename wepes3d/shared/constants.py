@@ -1,163 +1,161 @@
 """
-Constantes do formato face/hair do PES PS2.
+Constants of the PES PS2 face/hair format.
 
-Valores aqui foram derivados por engenharia reversa de templates (face.payload,
-face_X.payload, h1..h4.payload) e validados via roundtrip BIN -> OBJ -> BIN.
-Cada constante tem um comentario explicando POR QUE tem aquele valor.
+These values come from reverse engineering of real templates (face.payload,
+face_X.payload, h1..h4.payload) and were checked with BIN -> OBJ -> BIN
+roundtrips. Each constant has a comment that explains WHY it has that value.
 """
 
 # ============================================================================
-# Magic numbers e marcadores
+# Magic numbers and markers
 # ============================================================================
 
 MAGIC_MODEL = bytes([0x03, 0x00, 0xFF, 0xFF])
-"""Magic do header do modelo. Marca o inicio do sub-bloco que contem
+"""Magic of the model header. It marks the start of the block that holds
 total_parts + parts_start_rel.
 
-- FACE: aparece DIRETO em `offset_file_1` (payload[8]).
-- TROFEU: aparece mais fundo, em `offset_mdl` (apos navegar o container).
+- FACE: found DIRECTLY at `offset_file_1` (payload[8]).
+- TROPHY: found deeper, at `offset_mdl` (after going through the container).
 
-Ver `model_parser.locate_model`."""
+See `shared.model.parser.locate_model`."""
 
 CONTAINER_MAGIC = bytes([0x00, 0x06, 0x00, 0x00])
-"""Magic do container aninhado dos TROFEUS, em `offset_file_1` (payload[8])
-quando o asset NAO eh uma face direta. Indica que o modelo real (MDL, com
-MAGIC_MODEL) esta mais adiante: a partir de `offset_file_1` pula 32 bytes
-(base), le um uint32 em base+8 que aponta (relativo a base) para o MDL.
+"""Magic of the nested container used by TROPHIES, at `offset_file_1`
+(payload[8]) when the asset is NOT a plain face. It means the real model (MDL,
+with MAGIC_MODEL) is further ahead: from `offset_file_1` skip 32 bytes (base),
+then read a uint32 at base+8 that points (relative to base) to the MDL.
 
-Em base ha um DIRETORIO DE SECOES: base[0]=qtde de secoes, base[8]=offset da
-secao 0 (=MDL, rel a base), base[12..]=offsets das demais secoes (texturas),
-todos rel a base. A secao 1 comeca exatamente onde as parts do MDL terminam
-(parts_end) — por isso, ao redimensionar o MDL, as entradas a partir de base+12
-deslizam +delta. Ver `containers.TrophyContainer`."""
+At base there is a SECTION DIRECTORY: base[0] = number of sections, base[8] =
+offset of section 0 (= MDL, relative to base), base[12..] = offsets of the
+other sections (textures), all relative to base. Section 1 starts exactly where
+the MDL parts end (parts_end) — so when the MDL changes size, the entries from
+base+12 on move by +delta. See `adapters.pesweps2.trophies.profile`."""
 
 VIF_STRIP_MARKER = bytes([0x01, 0x00, 0x00, 0x05, 0x01, 0x01, 0x00, 0x01])
-"""Marker fixo de 8 bytes que precede a tag VIF UNPACK do strip dentro de
-cada part. Composto por 2 VIFcodes: STMOD mode=1 (ADD) + STCYCL CL=1 WL=1.
-O STCYCL reseta o ciclo de unpack para tight-packed (diferente do CL=4 WL=1
-usado para vertices/normais/UVs interleaved)."""
+"""Fixed 8-byte marker before the VIF UNPACK tag of the strip, inside each
+part. It is made of 2 VIFcodes: STMOD mode=1 (ADD) + STCYCL CL=1 WL=1.
+The STCYCL resets the unpack cycle to tight-packed (different from the
+CL=4 WL=1 used for the interleaved vertices/normals/UVs)."""
 
 
 # ============================================================================
-# Offsets dentro do model header
+# Offsets inside the model header
 # ============================================================================
 
 PARTS_INFO_OFFSET = 32
-"""Offset relativo a `offset_file_1` onde fica `total_parts` (uint32).
-Em seguida (offset + 4) vem `parts_start_rel`."""
+"""Offset, relative to `offset_file_1`, of `total_parts` (uint32).
+Right after it (offset + 4) comes `parts_start_rel`."""
 
 PARTS_END_REL_OFFSET = 0x2C
-"""Offset relativo a `offset_file_1` onde fica o FIM das parts, gravado
-RELATIVO ao modelo: `parts_end - offset_file_1` (uint32). Muda junto com o
-tamanho das parts.
+"""Offset, relative to `offset_file_1`, of the END of the parts, stored
+RELATIVE to the model: `parts_end - offset_file_1` (uint32). It changes when
+the parts change size.
 
-Validado em todos os modelos reais analisados (faces com o modelo em 0x10 e
-em 0x20, as 9 secoes dos trofeus, kits e estadios). Em face.bin, com o modelo
-em 0x10, ele coincide com `payload[0x3C] = parts_end - 16` — e foi assim que o
-Bug 4 o descreveu, o que deixava templates com o modelo em 0x20 (h2, face_1)
-e os trofeus com esse campo desatualizado no recount."""
+Checked on every real model we analysed (faces with the model at 0x10 and at
+0x20, the 9 sections of the trophies, kits and stadiums). In face.bin, with the
+model at 0x10, it is the same as `payload[0x3C] = parts_end - 16` — that is how
+Bug 4 described it, which left this field out of date after a recount in
+templates with the model at 0x20 (h2, face_1) and in trophies."""
 
 TEXTURE_INDEX_IN_PART = 52
-"""Offset relativo ao inicio de uma part onde fica `tex_id` (uint32)."""
+"""Offset, relative to the start of a part, of `tex_id` (uint32)."""
 
 VERTEX_IN_PART_OFFSET = 88
-"""Offset relativo a `part_info_start_raw` (= rel 0x0B0..0x110, o VIF prologue)
-onde fica `vertex_count` (uint16). Bate com o `data: vc, 0` do UNPACK do
-prologue."""
+"""Offset, relative to `part_info_start_raw` (= rel 0x0B0..0x110, the VIF
+prologue), of `vertex_count` (uint16). It matches the `data: vc, 0` of the
+prologue UNPACK."""
 
 
 # ============================================================================
-# Fatores de conversao de coordenadas
+# Coordinate conversion factors
 # ============================================================================
 
 VERTEX_FACTOR = -0.001553
-"""Multiplicador para converter int16 do .bin para float OBJ.
+"""Multiplier that converts the .bin int16 values into OBJ floats.
 
-Sinal negativo: invertido — vertices no .bin usam um sistema de coordenadas
-onde o eixo Y eh "para baixo" e o multiplicador negativo + inversao do X
-deixa tudo consistente com o sistema OBJ (Y para cima, X para direita).
+Negative sign: the .bin uses a coordinate system where the Y axis points
+"down"; the negative multiplier plus the X flip make it match the OBJ system
+(Y up, X to the right).
 
-Magnitude (~1/644): escolhida para que faces tipicas caibam em ~1.5 unidades
-no espaco OBJ (compativel com Blender default).
+Size (~1/644): chosen so that a typical face fits in ~1.5 units in OBJ space
+(works with the Blender defaults).
 
-Inversao do X: aplicada SEPARADAMENTE como `ix = round(x / VERTEX_FACTOR * -1)`,
-ou seja, X tem MAIS um flip alem do sinal negativo do VERTEX_FACTOR. Resultado
-liquido: X invertido relativo a Y/Z.
+X flip: applied SEPARATELY as `ix = round(x / VERTEX_FACTOR * -1)`, so X gets
+ONE MORE flip on top of the negative sign of VERTEX_FACTOR. Net result: X is
+flipped relative to Y/Z.
 """
 
 UV_FACTOR = 0.000244
-"""Multiplicador para int16 -> float em UVs. Aproximadamente 1/4096, que eh a
-resolucao tipica de texturas PS2 (4096 = 12 bits). UV no .bin armazena
-coordenadas em "texels" multiplicado por 4096 (saturated int16)."""
+"""Multiplier for int16 -> float on UVs. About 1/4096, the usual resolution of
+PS2 textures (4096 = 12 bits). The .bin stores UVs in "texels" times 4096
+(saturated int16)."""
 
 NORMAL_SCALE = 32767
-"""Magnitude do vetor normal int16. Cada componente de normal eh `int16` com
-range [-32767, 32767], representando float unitario [-1.0, 1.0].
+"""Length of the int16 normal vector. Each normal component is an `int16` in
+the range [-32767, 32767], which stands for a unit float in [-1.0, 1.0].
 
-Bug historico: versoes antigas usavam 1108. Causa: alguem mediu APENAS um
-componente individual em uma face especifica e nao a MAGNITUDE do vetor
-(sqrt(nx^2 + ny^2 + nz^2)). Validacao correta em todas as 8 parts de
-face.payload: magnitude = 32767 +- 1."""
+Historical bug: old versions used 1108. Cause: someone measured ONLY one
+component of one specific face, not the vector LENGTH
+(sqrt(nx^2 + ny^2 + nz^2)). The correct check on all 8 parts of face.payload
+gives length = 32767 +- 1."""
 
 
 # ============================================================================
-# Limites do formato
+# Format limits
 # ============================================================================
 
 MAX_PARTS_HARD = 8
-"""Numero maximo de parts que o jogo suporta.
+"""Maximum number of parts that the game supports.
 
-`payload[0x04] = 8` em TODOS os exemplos analisados (face.payload com 8 parts,
-face_X com 6, h1 com 6, h2/h3 com 4, h4 com 5). Provavelmente capacidade fixa
-do buffer de parts no engine.
+`payload[0x04] = 8` in ALL the analysed examples (face.payload with 8 parts,
+face_X with 6, h1 with 6, h2/h3 with 4, h4 with 5). Probably the fixed size of
+the parts buffer in the engine.
 
-Tentativa de subir esse byte para `new_total > 8` NAO funciona — face fica
-invisivel no jogo (mas aparece em editores externos da comunidade que ignoram
-esse campo)."""
+Raising this byte to `new_total > 8` does NOT work — the face becomes invisible
+in the game (but it shows up in community editors, which ignore this field)."""
 
 MAX_VERTEX_COUNT_PER_PART = 255
-"""Numero maximo de vertices em uma part. O campo `NUM` do VIF UNPACK eh uint8
-(byte 2 do VIFcode), entao max representavel = 255. Com 8 parts × 255 = 2040
-vertices total no .obj suportado."""
+"""Maximum number of vertices in one part. The `NUM` field of the VIF UNPACK is
+a uint8 (byte 2 of the VIFcode), so the largest value is 255. With 8 parts ×
+255 = 2040 vertices in total in the .obj."""
 
 MAX_STRIP_NUM = 255
-"""Numero maximo de elementos V4-16 no strip data. Mesmo limite do `NUM` do
-VIF UNPACK (uint8).
+"""Maximum number of V4-16 elements in the strip data. Same limit as the `NUM`
+of the VIF UNPACK (uint8).
 
-Cada elemento V4-16 = 4 indices int16. No modo triangle list o encoder gera
-3 indices por triangulo e empacota TODOS os triangulos de forma contigua; o
-strip inteiro eh entao paddeado UMA vez ate o proximo multiplo de 4 indices.
-Logo:
+Each V4-16 element = 4 int16 indices. In triangle list mode the encoder writes
+3 indices per triangle and packs ALL triangles one after the other; then the
+whole strip is padded ONCE up to the next multiple of 4 indices. So:
 
-    num_v4 = ceil(3 * num_triangulos / 4)
+    num_v4 = ceil(3 * num_triangles / 4)
 
-O teto num_v4 <= 255 da 1020 indices, ou seja ~340 triangulos por part
-(NAO 255: nao ha 1 pad por triangulo, so 1 pad no fim do strip)."""
+The limit num_v4 <= 255 gives 1020 indices, that is ~340 triangles per part
+(NOT 255: there is no pad per triangle, only 1 pad at the end of the strip)."""
 
 
 # ============================================================================
-# DMA / alinhamento
+# DMA / alignment
 # ============================================================================
 
 DMA_ALIGN = 16
-"""Cada DMA chain do PS2 transfere multiplos de 16 bytes (qwords). Toda part
-do .bin deve ter `size % 16 == 0`. O script aplica padding com zeros no
-final do `post_strip_bytes` para garantir esse alinhamento."""
+"""Each PS2 DMA chain moves multiples of 16 bytes (qwords). Every part of the
+.bin must have `size % 16 == 0`. The code pads the end of `post_strip_bytes`
+with zeros to keep this alignment."""
 
 
 # ============================================================================
-# Bone weights / area opcional no pre_parts
+# Bone weights / optional area in pre_parts
 # ============================================================================
 
 BONE_REGION_RELATIVE_START = 0xE0
-"""Offset relativo a `offset_file_1` onde COMECA a area de bones em arquivos
-"ricos" (face_X.bin, h1.bin). Em arquivos "simples" (face.bin) essa area NAO
-existe — pre_parts inteiro ocupa so 272 bytes."""
+"""Offset, relative to `offset_file_1`, where the bones area STARTS in "rich"
+files (face_X.bin, h1.bin). In "simple" files (face.bin) this area does NOT
+exist — the whole pre_parts is only 272 bytes."""
 
-# Notas sobre a area de bones:
-#   - Cada entry parece ter 8 bytes: 3 int16 vertex_pos + 1 int16 bone_idx.
-#   - Em ~90% das entries byte[7] == 0 (bone_idx < 256).
-#   - Estrutura completa tem sub-tabelas com formatos mistos (6/8 bytes).
-#   - face.bin (template simples) NAO tem essa area, e o jogo renderiza
-#     sem aplicar bone transformation. Por isso o script funciona com
-#     face.bin como template sem precisar tocar em bone weights.
+# Notes about the bones area:
+#   - Each entry seems to have 8 bytes: 3 int16 vertex_pos + 1 int16 bone_idx.
+#   - In ~90% of the entries byte[7] == 0 (bone_idx < 256).
+#   - The full structure has sub-tables with mixed formats (6/8 bytes).
+#   - face.bin (simple template) does NOT have this area, and the game draws
+#     it without bone transformation. That is why the code works with face.bin
+#     as template without touching bone weights.

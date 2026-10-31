@@ -1,16 +1,16 @@
 """
-Compressao e descompressao de arquivos .bin do PES PS2.
+Compression and decompression of PES PS2 .bin files.
 
-O formato .bin do PES PS2 tem:
+A PES PS2 .bin file has:
   [outer_header: 16 bytes] [ps2_extra: 16 bytes] [zlib_payload]
 
-O payload descompactado eh o conteudo "real" — o que o parser interpreta.
-O outer_header guarda:
-  - bytes [4..8]: tamanho do payload comprimido
-  - bytes [8..12]: tamanho do payload descompactado
+The decompressed payload is the "real" content — what the parser reads.
+The outer_header stores:
+  - bytes [4..8]: size of the compressed payload
+  - bytes [8..12]: size of the decompressed payload
 
-Os outros bytes do header sao preservados intactos durante roundtrip
-(sao headers do sistema de arquivos do PES, nao interessam ao modelo 3D).
+The other header bytes are kept untouched in a roundtrip (they belong to the
+PES file system and do not matter for the 3D model).
 """
 
 import struct
@@ -20,12 +20,12 @@ from typing import Tuple
 
 def decompress_bin(filepath: str) -> Tuple[bytes, bytes, bytes]:
     """
-    Le e descompacta um .bin do PES PS2.
+    Reads and decompresses a PES PS2 .bin file.
 
     Returns:
-        payload: bytes descompactados (o conteudo "real" do modelo).
-        outer_full_header: 32 bytes iniciais (outer_header + ps2_extra).
-        trailing: dados apos o blob zlib (geralmente vazio, preservado para
+        payload: decompressed bytes (the "real" content of the model).
+        outer_full_header: the first 32 bytes (outer_header + ps2_extra).
+        trailing: data after the zlib blob (usually empty, kept for the
             roundtrip).
     """
     with open(filepath, 'rb') as f:
@@ -42,12 +42,12 @@ def decompress_bin(filepath: str) -> Tuple[bytes, bytes, bytes]:
 
 def decompress_payload(block: bytes) -> bytes:
     """
-    Descompacta um bloco .bin a partir de BYTES (em vez de caminho).
+    Decompresses a .bin block given as BYTES (instead of a path).
 
-    `block` deve comecar pelo header de 32 bytes (magic 00 06 01 00 +
-    tamanhos) seguido do blob zlib. Bytes apos o stream zlib (ex.: o proximo
-    bloco de um container) sao ignorados. Util para blocos comprimidos dentro
-    de um container 00 06 00 00 (estadios).
+    `block` must start with the 32-byte header (magic 00 06 01 00 + sizes),
+    followed by the zlib blob. Bytes after the zlib stream (e.g. the next
+    block of a container) are ignored. Useful for compressed blocks inside a
+    00 06 00 00 container (stadiums).
     """
     decompressor = zlib.decompressobj()
     return decompressor.decompress(block[32:])
@@ -56,13 +56,13 @@ def decompress_payload(block: bytes) -> bytes:
 def compress_bin(payload: bytes, outer_full_header: bytes, trailing: bytes,
                  output_path: str) -> None:
     """
-    Compacta um payload e escreve no formato .bin do PES PS2.
+    Compresses a payload and writes it in the PES PS2 .bin format.
 
-    Atualiza os campos de tamanho no outer header:
-      - byte[4..8]:  uint32 LE = tamanho do payload comprimido
-      - byte[8..12]: uint32 LE = tamanho do payload descompactado
+    Updates the size fields in the outer header:
+      - byte[4..8]:  uint32 LE = size of the compressed payload
+      - byte[8..12]: uint32 LE = size of the decompressed payload
 
-    Os demais bytes do header sao preservados como veio.
+    The other header bytes are kept as they were.
     """
     compressed = zlib.compress(payload, 9)
 

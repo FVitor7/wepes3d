@@ -1,10 +1,10 @@
 """
-Geometria ASSET-AGNOSTICA: bounding box, auto-fit e calculo de normais.
+ASSET-AGNOSTIC geometry: bounding box, auto-fit and normals.
 
-As conversoes int16<->float (especificas de cada asset) NAO ficam aqui — estao
-em `faces/profile.py` e `trophy/profile.py`, expostas via CoordSpace. As funcoes
-abaixo recebem o conversor `int16_to_obj` quando precisam reverter os int16 do
-template para o espaco OBJ.
+The int16<->float conversions (specific to each asset) are NOT here — they are
+in each `adapters/pesweps2/<asset>/profile.py`, exposed through CoordSpace. The
+functions below receive the `int16_to_obj` converter when they need to turn
+the template int16 values back into OBJ space.
 """
 
 import math
@@ -12,13 +12,13 @@ from typing import Callable, List, Tuple
 
 
 # ============================================================================
-# Bounding box e auto-fit
+# Bounding box and auto-fit
 # ============================================================================
 
 def compute_obj_bbox(vertices: List[Tuple[float, float, float]]
                      ) -> Tuple[Tuple[float, float, float],
                                 Tuple[float, float, float]]:
-    """Retorna (min_xyz, max_xyz) das coordenadas de um array de vertices."""
+    """Returns (min_xyz, max_xyz) of the coordinates of a vertex array."""
     return (
         (min(v[0] for v in vertices),
          min(v[1] for v in vertices),
@@ -32,10 +32,11 @@ def compute_obj_bbox(vertices: List[Tuple[float, float, float]]
 def compute_template_obj_bbox(template, int16_to_obj: Callable
                               ) -> Tuple[Tuple[float, float, float],
                                          Tuple[float, float, float]]:
-    """Bbox de um template (Model) no espaco OBJ — reverte os int16 dos
-    vertices de todas as parts para float e tira min/max.
+    """Bbox of a template (Model) in OBJ space — turns the int16 vertices of
+    all parts back into floats and takes min/max.
 
-    `int16_to_obj`: conversor stored->obj do asset (`profile.coord.int16_to_obj_vertex`)."""
+    `int16_to_obj`: the asset's stored->obj converter
+    (`profile.coord.int16_to_obj_vertex`)."""
     all_x: List[float] = []
     all_y: List[float] = []
     all_z: List[float] = []
@@ -55,16 +56,18 @@ def auto_fit_vertices(vertices: List[Tuple[float, float, float]],
                       template, int16_to_obj: Callable
                       ) -> List[Tuple[float, float, float]]:
     """
-    Re-escala e re-posiciona vertices do OBJ para caber dentro do bbox do
-    template.
+    Rescales and moves the OBJ vertices so they fit inside the template
+    bbox.
 
-    Usa escala UNIFORME (preserva proporcoes do rosto importado):
-      - Calcula bbox do OBJ e do template (ambos em espaco float OBJ).
-      - Escala uniformemente usando MIN ratio (rosto cabe inteiro no bbox).
-      - Translada para alinhar centros.
+    Uses a UNIFORM scale (keeps the proportions of the imported face):
+      - Computes the bbox of the OBJ and of the template (both in float OBJ
+        space).
+      - Scales uniformly with the MIN ratio (the whole face fits in the bbox).
+      - Moves it so the centers match.
 
-    Sem isso, um .obj com posicao/escala arbitraria (vindo de fontes externas)
-    fica fora do frustum do PES PS2 -> face invisivel no editor + jogo.
+    Without this, an .obj with an arbitrary position/scale (from outside
+    sources) ends up outside the PES PS2 frustum -> invisible face in the
+    editor and in the game.
     """
     omin, omax = compute_obj_bbox(vertices)
     tmin, tmax = compute_template_obj_bbox(template, int16_to_obj)
@@ -88,7 +91,7 @@ def auto_fit_vertices(vertices: List[Tuple[float, float, float]],
           f"Y[{omin[1]:.3f}..{omax[1]:.3f}] Z[{omin[2]:.3f}..{omax[2]:.3f}]")
     print(f"      Template bbox: X[{tmin[0]:.3f}..{tmax[0]:.3f}] "
           f"Y[{tmin[1]:.3f}..{tmax[1]:.3f}] Z[{tmin[2]:.3f}..{tmax[2]:.3f}]")
-    print(f"      Escala uniforme: {scale:.4f} "
+    print(f"      Uniform scale: {scale:.4f} "
           f"(sx={sx:.4f}, sy={sy:.4f}, sz={sz:.4f})")
 
     return [
@@ -100,7 +103,7 @@ def auto_fit_vertices(vertices: List[Tuple[float, float, float]],
 
 
 # ============================================================================
-# Calculo de normais
+# Normals
 # ============================================================================
 
 def compute_vertex_normals(
@@ -108,16 +111,16 @@ def compute_vertex_normals(
     faces: List[Tuple[int, int, int]],
 ) -> List[Tuple[float, float, float]]:
     """
-    Calcula normais SUAVES por vertice como media ponderada por area dos
-    triangulos vizinhos.
+    Computes SMOOTH per-vertex normals as an area-weighted average of the
+    triangles around each vertex.
 
-    Para cada face, normal_face = cross(b-a, c-a). A magnitude do cross
-    eh proporcional a 2x a area do triangulo, entao somar essa normal
-    pondera implicitamente por area. Normalizamos no final.
+    For each face, face_normal = cross(b-a, c-a). The length of the cross
+    product is 2x the triangle area, so adding this normal already weights
+    it by area. We normalize at the end.
 
-    Resultado: cada vertice recebe a media das normais das faces que o
-    contem, ponderada por area. Bom default para faces sem informacao
-    explicita de smoothing.
+    Result: each vertex gets the average of the normals of the faces that
+    use it, weighted by area. A good default for faces with no explicit
+    smoothing information.
     """
     n = len(vertices)
     sx = [0.0] * n
@@ -147,5 +150,5 @@ def compute_vertex_normals(
         if length > 1e-10:
             result.append((sx[i] / length, sy[i] / length, sz[i] / length))
         else:
-            result.append((0.0, 1.0, 0.0))   # fallback para vertices isolados
+            result.append((0.0, 1.0, 0.0))   # fallback for isolated vertices
     return result

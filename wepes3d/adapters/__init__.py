@@ -1,16 +1,16 @@
 """
-adapters — um subpacote por PLATAFORMA, e dentro dela por TIPO de asset.
+adapters — one sub-package per PLATFORM, and inside it one per asset TYPE.
 
-  * pesweps2 — PES/WE PlayStation 2 (int16, modelo 0300ffff, VIF unpacks).
+  * pesweps2 — PES/WE PlayStation 2 (int16, 0300ffff model, VIF unpacks).
                faces, trophies, stadiums, kits. Import + export.
-  * pes6pc   — PES6/WE PC (float32, modelo 20050420, strips por vertex group).
-               faces, trophies. SO export (.bin/.str -> .obj).
+  * pes6pc   — PES6/WE PC (float32, 20050420 model, strips per vertex group).
+               faces, trophies. Export ONLY (.bin/.str -> .obj).
 
-PC e PS2 sao formatos binarios DIFERENTES: PC nao reaproveita o motor PS2
-(`shared/pipeline`/`shared/model`), so a I/O comum (`shared/io`: descompressao
-zlib + escrita de .obj). Cada plataforma e' isolada na sua pasta.
+PC and PS2 are DIFFERENT binary formats: PC does not reuse the PS2 engine
+(`shared/pipeline`/`shared/model`), only the common I/O (`shared/io`: zlib
+decompression + .obj writing). Each platform lives in its own folder.
 
-Adapter PS2 e' fino: `profile.py` (CoordSpace + navegacao + AssetProfile) +
-`__init__.py` (wrappers import_/export_ que delegam ao motor `shared/`).
-Ver docs/11-arquitetura.md.
+A PS2 adapter is thin: `profile.py` (CoordSpace + navigation + AssetProfile)
++ `__init__.py` (import_/export_ wrappers that call the `shared/` engine).
+See docs/10-architecture.md.
 """

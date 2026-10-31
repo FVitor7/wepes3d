@@ -1,4 +1,4 @@
-"""CLI: os 3 subcomandos, todos os tipos, flags e tratamento de erros."""
+"""CLI: the 3 subcommands, all types, options and error handling."""
 
 import runpy
 import sys
@@ -10,7 +10,7 @@ from wepes3d import compress_bin
 
 
 def run(monkeypatch, *args):
-    """Roda cli.main() com o argv dado."""
+    """Runs cli.main() with the given argv."""
     monkeypatch.setattr(sys, "argv", ["wepes3d", *args])
     cli.main()
 
@@ -26,12 +26,12 @@ def test_cli_list_face(monkeypatch, face_bin, capsys):
 
 def test_cli_list_trophy(monkeypatch, trophy_bin, capsys):
     run(monkeypatch, "list", trophy_bin, "--type", "trophy")
-    assert "secao" in capsys.readouterr().out
+    assert "section" in capsys.readouterr().out
 
 
 def test_cli_list_auto_detects(monkeypatch, trophy_bin, capsys):
     run(monkeypatch, "list", trophy_bin)               # --type auto (default)
-    assert "trofeu" in capsys.readouterr().out
+    assert "trophy" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("kind,fixture", [
@@ -83,7 +83,7 @@ def test_cli_export_pc(monkeypatch, pc_face_bin, tmp_path):
 
 def test_cli_export_auto(monkeypatch, face_bin, tmp_path):
     out = tmp_path / "auto.obj"
-    run(monkeypatch, "export", face_bin, str(out))     # sem --type -> auto
+    run(monkeypatch, "export", face_bin, str(out))     # no --type -> auto
     assert out.exists()
 
 
@@ -110,12 +110,12 @@ def test_cli_import_recount(monkeypatch, face_bin, grid_obj, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Erros de uso (argparse -> SystemExit 2) e de execução (SystemExit 1)
+# Usage errors (argparse -> SystemExit 2) and runtime errors (SystemExit 1)
 # ---------------------------------------------------------------------------
 
 def test_cli_no_command(monkeypatch):
     with pytest.raises(SystemExit):
-        run(monkeypatch)                               # subcomando obrigatório
+        run(monkeypatch)                               # a subcommand is required
 
 
 def test_cli_help(monkeypatch):
@@ -133,13 +133,13 @@ def test_cli_export_all_on_face_errors(monkeypatch, face_bin, tmp_path):
 def test_cli_import_groups_without_recount(monkeypatch, face_bin, face_obj, tmp_path):
     with pytest.raises(SystemExit):
         run(monkeypatch, "import", face_bin, face_obj, str(tmp_path / "x.bin"),
-            "--use-groups")                             # requer --allow-recount
+            "--use-groups")                             # needs --allow-recount
 
 
 def test_cli_import_bad_part_sizes(monkeypatch, face_bin, face_obj, tmp_path):
     with pytest.raises(SystemExit):
         run(monkeypatch, "import", face_bin, face_obj, str(tmp_path / "x.bin"),
-            "--allow-recount", "--part-sizes", "a,b,c")  # não são inteiros
+            "--allow-recount", "--part-sizes", "a,b,c")  # not integers
 
 
 def test_cli_file_not_found(monkeypatch, tmp_path):
@@ -151,7 +151,7 @@ def test_cli_file_not_found(monkeypatch, tmp_path):
 
 def test_cli_corrupt_file_struct_error(monkeypatch, tmp_path):
     bad = tmp_path / "bad.bin"
-    compress_bin(b"\x00\x00\x00\x00", b"\x00" * 32, b"", str(bad))  # payload curto demais
+    compress_bin(b"\x00\x00\x00\x00", b"\x00" * 32, b"", str(bad))  # payload too short
     with pytest.raises(SystemExit) as e:
         run(monkeypatch, "export", str(bad), str(tmp_path / "o.obj"), "--type", "face")
     assert e.value.code == 1
@@ -168,7 +168,7 @@ def test_cli_keyboard_interrupt(monkeypatch, face_bin, tmp_path):
 
 def test_cli_value_error_clean_exit(monkeypatch, face_bin, tmp_path):
     def boom(*a, **k):
-        raise ValueError("erro de teste")
+        raise ValueError("test error")
     monkeypatch.setattr(cli, "export_face", boom)
     with pytest.raises(SystemExit) as e:
         run(monkeypatch, "export", face_bin, str(tmp_path / "o.obj"), "--type", "face")
@@ -176,13 +176,13 @@ def test_cli_value_error_clean_exit(monkeypatch, face_bin, tmp_path):
 
 
 def test_main_module_importable():
-    # importar __main__ como módulo normal (guarda __name__ != "__main__")
+    # imports __main__ as a normal module (the __name__ != "__main__" guard)
     import wepes3d.__main__ as m
     assert hasattr(m, "main")
 
 
 def test_main_module_entrypoint(monkeypatch, face_bin):
-    # executa `python -m wepes3d list ...` via runpy
+    # runs `python -m wepes3d list ...` with runpy
     sys.modules.pop("wepes3d.__main__", None)
     monkeypatch.setattr(sys, "argv",
                         ["wepes3d", "list", face_bin, "--type", "face"])

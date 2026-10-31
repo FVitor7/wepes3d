@@ -1,15 +1,15 @@
-# Configuração de TESTE / desenvolvimento.
+# TEST / development settings.
 #
-# IMPORTANTE: o pacote em si (runtime) continua SEM dependências externas —
-# usa só a biblioteca padrão do Python (struct, zlib, math, argparse...).
-# As dependências abaixo são SÓ para rodar a suíte de testes (pytest + coverage).
-# Instale-as com:  pip install -r requirements-dev.txt
+# IMPORTANT: the package itself (runtime) still has NO external dependencies —
+# it only uses the Python standard library (struct, zlib, math, argparse...).
+# The dependencies below are ONLY for running the test suite (pytest + coverage).
+# Install them with:  pip install -r requirements-dev.txt
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-# A suíte mede cobertura por padrão. `pythonpath = ["."]` coloca a raiz do
-# repositório no sys.path, então `import wepes3d` funciona também com o
-# `pytest` puro (o `python -m pytest` já faz isso sozinho).
+# The suite measures coverage by default. `pythonpath = ["."]` puts the
+# repository root on sys.path, so `import wepes3d` also works with plain
+# `pytest` (`python -m pytest` already does this by itself).
 addopts = "-q --cov=wepes3d --cov-report=term-missing --cov-branch"
 testpaths = ["tests"]
 pythonpath = ["."]
@@ -24,7 +24,7 @@ omit = [
 [tool.coverage.report]
 show_missing = true
 skip_covered = false
-# Linhas que não contam como "não cobertas" (entrypoints e defesas).
+# Lines that do not count as "not covered" (entry points and safety checks).
 exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.:",

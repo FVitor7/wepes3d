@@ -1,18 +1,18 @@
 """
-Adapter de ESTADIO (export .bin/.str -> .obj).
+STADIUM adapter (export .bin/.str -> .obj).
 
-Um arquivo de estadio e' uma "pasta" de modelos (arquibancadas/quadrantes); um
-container .bin agrupa varios blocos. O modelo 3D interno (parts/VIF/strip) e' o
-MESMO de face/trofeu — so muda a coord (escala 1/256). Toda a logica de leitura
-e export e' generica em `shared/pes_archive.py` + `shared/folder_models.py`;
-aqui so amarramos o `CoordSpace` do estadio.
+A stadium file is a "folder" of models (stands/quadrants); a .bin container
+groups several blocks. The internal 3D model (parts/VIF/strip) is the SAME
+as in faces/trophies — only the coord changes (scale 1/256). All the reading
+and export logic is generic, in `shared/io/pes_archive.py` +
+`shared/pipeline/folder.py`; here we only plug in the stadium `CoordSpace`.
 
 API:
-    list_stadium("stadium.bin")                       # imprime estrutura
-    export_stadium("stadium.str", "m0.obj")           # 1 modelo (global 0)
-    export_stadium_complete("stadium.bin", "all.obj") # tudo num .obj so
-    export_stadium_parts("stadium.bin", "out/estadio")# 1 .obj por modelo
-    export_stadium_scene([a, b, ...], "cena.obj")     # varios arquivos num .obj
+    list_stadium("stadium.bin")                       # prints the structure
+    export_stadium("stadium.str", "m0.obj")           # 1 model (global 0)
+    export_stadium_complete("stadium.bin", "all.obj") # everything in one .obj
+    export_stadium_parts("stadium.bin", "out/stadium")# 1 .obj per model
+    export_stadium_scene([a, b, ...], "scene.obj")    # several files in one .obj
 """
 
 from typing import List, Tuple

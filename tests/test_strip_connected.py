@@ -1,4 +1,4 @@
-"""Strip conectado: funções de orientação/codificação + demo (_measure/__main__)."""
+"""Connected strip: orientation/encoding functions + demo (_measure/__main__)."""
 
 import runpy
 import sys
@@ -12,7 +12,7 @@ from wepes3d.shared.model.strip_connected import (
 
 
 def test_orient_coherent_makes_winding_consistent():
-    # dois triângulos com winding OPOSTO -> orient_coherent deve coerir
+    # two triangles with OPPOSITE winding -> orient_coherent must make them agree
     tris = [(0, 1, 2), (1, 2, 3)]
     out = orient_coherent(tris)
     assert len(out) == 2
@@ -26,7 +26,7 @@ def test_decode_connected_strips_alternates_winding():
 
 
 def test_connected_strips_skips_short_strip():
-    assert connected_strips_to_indices([[1, 2]]) == []   # strip < 3 vértices: ignora
+    assert connected_strips_to_indices([[1, 2]]) == []   # strip < 3 vertices: ignored
 
 
 def test_verify_reports_ok_for_consistent_mesh():
@@ -38,8 +38,8 @@ def test_verify_reports_ok_for_consistent_mesh():
 
 
 def test_orient_for_front_flips_backfacing_component():
-    # normais apontam para -Z, mas a geometria está orientada para +Z:
-    # orient_for_front deve inverter o componente para ficar front-facing.
+    # the normals point to -Z, but the geometry faces +Z:
+    # orient_for_front must flip the component so it faces forward.
     tris = [(0, 1, 2), (0, 2, 3)]
     verts = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)]
     normals = [(0, 0, -1)] * 4
@@ -51,14 +51,14 @@ _MOD = "wepes3d.shared.model.strip_connected"
 
 
 def _run_main():
-    # remove do cache para o runpy executar o módulo "do zero" como __main__
-    # (evita o RuntimeWarning de "found in sys.modules").
+    # removes it from the cache so runpy runs the module "from scratch" as
+    # __main__ (avoids the "found in sys.modules" RuntimeWarning).
     sys.modules.pop(_MOD, None)
     runpy.run_module(_MOD, run_name="__main__", alter_sys=True)
 
 
 def test_demo_main_valid_args(monkeypatch, face_bin, face_obj, capsys):
-    """`python -m ...strip_connected TEMPLATE OBJ` roda a medição (cobre _measure)."""
+    """`python -m ...strip_connected TEMPLATE OBJ` runs the measurement (covers _measure)."""
     monkeypatch.setattr(sys, "argv", ["strip_connected", face_bin, face_obj])
     _run_main()
     assert "tristrip" in capsys.readouterr().out

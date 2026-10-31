@@ -1,18 +1,18 @@
 """
-CLI: tres subcomandos, cada um com seus positionais e flags.
+CLI: three subcommands, each with its own positional arguments and options.
 
-    python -m wepes3d <comando> ...
+    python -m wepes3d <command> ...
 
-  export   .bin/.str -> .obj   (PS2 face/trofeu/estadio/kit + PES6 PC)
-  import   .obj -> .bin        (so PS2 face/trofeu)
-  list     mostra a estrutura do arquivo
+  export   .bin/.str -> .obj   (PS2 face/trophy/stadium/kit + PES6 PC)
+  import   .obj -> .bin        (PS2 face/trophy only)
+  list     shows the structure of the file
 
-Exemplos:
-    python -m wepes3d export face.bin rosto.obj
-    python -m wepes3d export trofeu.bin t.obj --section 2
-    python -m wepes3d export pl.str trofeu.obj --type pc --all
-    python -m wepes3d export pl.str taca.obj  --type pc --model 0
-    python -m wepes3d import face.bin novo.obj saida.bin \\
+Examples:
+    python -m wepes3d export face.bin face.obj
+    python -m wepes3d export trophy.bin t.obj --section 2
+    python -m wepes3d export pl.str trophy.obj --type pc --all
+    python -m wepes3d export pl.str cup.obj    --type pc --model 0
+    python -m wepes3d import face.bin new.obj out.bin \\
         --allow-recount --recalculate-normals --auto-fit
     python -m wepes3d list pl.str --type pc
 """
@@ -30,7 +30,7 @@ from . import (
     decompress_bin, detect_asset_type, trophy_section_offsets,
 )
 
-# Tipos "pasta de modelos" (1 .bin = N modelos): export por modelo/completo/partes.
+# "Model folder" types (1 .bin = N models): export by model/complete/parts.
 FOLDER_FN = {
     "stadium": (list_stadium, export_stadium, export_stadium_complete, export_stadium_parts),
     "kit":     (list_kit, export_kit, export_kit_complete, export_kit_parts),
@@ -46,11 +46,11 @@ ALL_TYPES = ["auto", "face", "trophy", "stadium", "kit", "pc"]
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="wepes3d",
-        description="PES: exporta/importa modelos 3D entre .bin/.str e .obj "
-                    "(PS2: face/trofeu/estadio/kit; PES6 PC: face/trofeu).",
+        description="PES: exports/imports 3D models between .bin/.str and .obj "
+                    "(PS2: face/trophy/stadium/kit; PES6 PC: face/trophy).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    sub = parser.add_subparsers(dest="command", required=True, metavar="comando")
+    sub = parser.add_subparsers(dest="command", required=True, metavar="command")
 
     _add_export(sub)
     _add_import(sub)
@@ -61,109 +61,109 @@ def build_parser() -> argparse.ArgumentParser:
 def _add_export(sub) -> None:
     p = sub.add_parser(
         "export", help=".bin/.str -> .obj",
-        description="Exporta a geometria de um .bin/.str para .obj (+ .mtl).",
+        description="Exports the geometry of a .bin/.str to .obj (+ .mtl).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Por tipo:
-  auto/face/trophy (PS2) : exporta 1 modelo. Trofeu: escolha o sub-modelo com
-                           --section N (0 = principal).
-  stadium/kit/pc         : "pasta de modelos" — escolha:
-                             (nada) / --all : todos os modelos num .obj so
-                             --model M      : so o modelo M (--block B restringe)
-                             --parts        : um .obj por modelo (OUT = prefixo)
-                           --groups (1 'o' por part) e --dedup tambem valem aqui.
+By type:
+  auto/face/trophy (PS2) : exports 1 model. Trophy: pick the sub-model with
+                           --section N (0 = main).
+  stadium/kit/pc         : "model folder" — pick:
+                             (nothing) / --all : all models in one .obj
+                             --model M         : only model M (--block B narrows it)
+                             --parts           : one .obj per model (OUT = prefix)
+                           --groups (1 'o' per part) and --dedup also work here.
 """)
-    p.add_argument("input", help=".bin/.str de entrada.")
-    p.add_argument("out", help=".obj de saida (ou prefixo, com --parts).")
+    p.add_argument("input", help="Input .bin/.str.")
+    p.add_argument("out", help="Output .obj (or a prefix, with --parts).")
     p.add_argument("--type", choices=ALL_TYPES, default="auto",
-        help="Tipo do arquivo (default: auto = detecta face/trofeu PS2).")
+        help="File type (default: auto = detects PS2 face/trophy).")
     p.add_argument("--section", type=int, default=0, metavar="N",
-        help="TROFEU PS2: qual sub-modelo (.mdl). 0 = principal (default).")
+        help="PS2 TROPHY: which sub-model (.mdl). 0 = main (default).")
 
     sel = p.add_mutually_exclusive_group()
     sel.add_argument("--all", "--complete", dest="all", action="store_true",
-        help="pasta de modelos: TODOS os modelos num .obj so (default).")
+        help="model folder: ALL models in one .obj (default).")
     sel.add_argument("--parts", action="store_true",
-        help="pasta de modelos: um .obj por modelo (OUT vira prefixo).")
+        help="model folder: one .obj per model (OUT becomes a prefix).")
     sel.add_argument("--model", type=int, default=None, metavar="M",
-        help="pasta de modelos: exporta SO o modelo M.")
+        help="model folder: exports ONLY model M.")
     p.add_argument("--block", type=int, default=None, metavar="B",
-        help="pasta de modelos: restringe --model a um bloco do container.")
+        help="model folder: limits --model to one block of the container.")
     p.add_argument("--groups", action="store_true",
-        help="pasta de modelos: 1 objeto 'o part_NN' por part no .obj.")
+        help="model folder: 1 'o part_NN' object per part in the .obj.")
     p.add_argument("--dedup", action="store_true",
-        help="pasta de modelos: remove parts/modelos duplicados.")
+        help="model folder: removes duplicated parts/models.")
     p.set_defaults(func=cmd_export)
 
 
 def _add_import(sub) -> None:
     p = sub.add_parser(
-        "import", help=".obj -> .bin (so PS2)",
-        description="Importa um .obj para um .bin de FACE ou TROFEU do PES PS2.",
+        "import", help=".obj -> .bin (PS2 only)",
+        description="Imports an .obj into a PES PS2 FACE or TROPHY .bin.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Estrategias de particionamento (mutuamente exclusivas — escolha 1; default = BFS
-por adjacencia de faces):
-  --use-groups         : cada 'g'/'o' do .obj vira uma part (controle manual no
-                         Blender). Nº de grupos deve = nº de parts do template.
-  --part-sizes L       : voce define quantos vertices por part (lista por virgula;
-                         soma = total de vertices do .obj).
-  --max-verts-per-part : limita vertices por part (cria parts novas se precisar;
-                         max 8, limite do jogo).
---match-template particiona por nearest-neighbor no espaco do template (use com
---auto-fit). Todas estas requerem --allow-recount.
+Partition strategies (pick only 1; default = BFS by face adjacency):
+  --use-groups         : each 'g'/'o' of the .obj becomes a part (manual control
+                         in Blender). Number of groups must = number of parts
+                         in the template.
+  --part-sizes L       : you choose how many vertices go in each part (comma
+                         separated list; the sum = vertices in the .obj).
+  --max-verts-per-part : limits the vertices per part (creates new parts if
+                         needed; max 8 for faces, the game limit).
+--match-template partitions by nearest neighbour in template space (use it
+with --auto-fit). All of these need --allow-recount.
 
-Exemplos:
-  ... import face.bin meu.obj saida.bin --recalculate-normals
-  ... import face.bin novo.obj saida.bin --allow-recount --recalculate-normals --auto-fit
+Examples:
+  ... import face.bin my.obj out.bin --recalculate-normals
+  ... import face.bin new.obj out.bin --allow-recount --recalculate-normals --auto-fit
 """)
-    p.add_argument("template", help=".bin template (base a ser modificada).")
-    p.add_argument("obj", help=".obj com a nova geometria.")
-    p.add_argument("out", help=".bin de saida.")
+    p.add_argument("template", help="Template .bin (the base that will be changed).")
+    p.add_argument("obj", help=".obj with the new geometry.")
+    p.add_argument("out", help="Output .bin.")
     p.add_argument("--type", choices=["auto", "face", "trophy"], default="auto",
-        help="Tipo do template (default: auto). PC nao suporta import.")
+        help="Template type (default: auto). PC does not support import.")
     p.add_argument("--section", type=int, default=0, metavar="N",
-        help="TROFEU: qual sub-modelo (.mdl) substituir. 0 = principal.")
+        help="TROPHY: which sub-model (.mdl) to replace. 0 = main.")
 
     p.add_argument("--recalculate-normals", action="store_true",
-        help="Recalcula normais da nova geometria (recomendado).")
+        help="Recalculates the normals of the new geometry (recommended).")
     p.add_argument("--allow-recount", action="store_true",
-        help="Permite .obj com contagem de vertices diferente do template.")
+        help="Allows an .obj whose vertex count is different from the template.")
     p.add_argument("--auto-fit", action="store_true",
-        help="Escala/centra os vertices do .obj no bbox do template.")
+        help="Scales/centers the .obj vertices into the template bbox.")
 
     part = p.add_mutually_exclusive_group()
     part.add_argument("--use-groups", action="store_true",
-        help="Usa grupos 'g'/'o' do .obj como parts. Requer --allow-recount.")
+        help="Uses the 'g'/'o' groups of the .obj as parts. Needs --allow-recount.")
     part.add_argument("--part-sizes", type=str, default=None, metavar="L",
-        help="Sizes manuais por part (csv). Requer --allow-recount.")
+        help="Manual sizes per part (csv). Needs --allow-recount.")
     part.add_argument("--max-verts-per-part", type=int, default=None, metavar="N",
-        help="Limita vertices por part. Requer --allow-recount.")
+        help="Limits the vertices per part. Needs --allow-recount.")
     p.add_argument("--match-template", action="store_true",
-        help="Particiona via nearest-neighbor no espaco do template (use com --auto-fit).")
+        help="Partitions by nearest neighbour in template space (use it with --auto-fit).")
 
     p.add_argument("--no-preserve-strips", action="store_true",
-        help="Re-codifica TODOS os strips (mesmo de parts identicas ao template) "
-             "— desliga o passthrough zero-diff.")
+        help="Re-encodes ALL strips (even for parts identical to the template) "
+             "— turns off the zero-diff passthrough.")
     p.add_argument("--strip-mode", choices=["connected", "list"], default="connected",
-        help="Codificacao dos strips de parts NOVAS: 'connected' (default — "
-             "tristrips conectados, ~35%% menores, validado in-game) ou 'list' "
-             "(triangle list, formato legado). Ver docs/05-strip-encoding.md.")
+        help="Encoding of the strips of NEW parts: 'connected' (default — "
+             "connected tristrips, ~35%% smaller, checked in the game) or 'list' "
+             "(triangle list, legacy format). See docs/05-strip-encoding.md.")
     p.set_defaults(func=cmd_import)
 
 
 def _add_list(sub) -> None:
     p = sub.add_parser(
-        "list", help="mostra a estrutura do arquivo",
-        description="Imprime a estrutura (modelos/partes/secoes) do .bin/.str.")
-    p.add_argument("input", help=".bin/.str de entrada.")
+        "list", help="shows the structure of the file",
+        description="Prints the structure (models/parts/sections) of the .bin/.str.")
+    p.add_argument("input", help="Input .bin/.str.")
     p.add_argument("--type", choices=ALL_TYPES, default="auto",
-        help="Tipo do arquivo (default: auto).")
+        help="File type (default: auto).")
     p.set_defaults(func=cmd_list)
 
 
 # ============================================================================
-# Comandos
+# Commands
 # ============================================================================
 
 def cmd_export(args) -> None:
@@ -176,15 +176,15 @@ def cmd_export(args) -> None:
         elif args.model is not None or args.block is not None:
             f_one(args.input, args.out, model=args.model or 0, block=args.block,
                   groups=args.groups, dedup=args.dedup)
-        else:  # default e --all: tudo num .obj
+        else:  # default and --all: everything in one .obj
             f_complete(args.input, args.out, dedup=args.dedup)
         return
 
-    # PS2 face/trofeu: 1 modelo. Flags de "pasta de modelos" nao se aplicam.
+    # PS2 face/trophy: 1 model. The "model folder" options do not apply.
     if args.all or args.parts or args.model is not None or args.block is not None \
             or args.groups or args.dedup:
-        parser_error("--all/--parts/--model/--block/--groups/--dedup so valem "
-                     "para --type stadium|kit|pc.")
+        parser_error("--all/--parts/--model/--block/--groups/--dedup only work "
+                     "with --type stadium|kit|pc.")
     if args.type == "face":
         export_face(args.input, args.out)
     elif args.type == "trophy":
@@ -200,17 +200,18 @@ def cmd_import(args) -> None:
                      "--max-verts-per-part" if args.max_verts_per_part is not None
                      else None)
     if needs_recount and not args.allow_recount:
-        parser_error(f"{needs_recount} requer --allow-recount.")
+        parser_error(f"{needs_recount} needs --allow-recount.")
 
     part_sizes = None
     if args.part_sizes:
         try:
             part_sizes = [int(x.strip()) for x in args.part_sizes.split(",")]
         except ValueError:
-            parser_error("--part-sizes deve ser inteiros separados por virgula.")
+            parser_error("--part-sizes must be integers separated by commas.")
 
-    # So as OPCOES (fluem pro **kwargs). Os caminhos vao posicionais (str), p/
-    # nao desempacotar tipos variados nos params tipados template/obj/output.
+    # Only the OPTIONS (they go into **kwargs). The paths are passed as
+    # positional strings, so we do not unpack mixed types into the typed
+    # template/obj/output parameters.
     opts = dict(
         recalculate_normals=args.recalculate_normals,
         allow_recount=args.allow_recount,
@@ -226,7 +227,7 @@ def cmd_import(args) -> None:
         import_face(args.template, args.obj, args.out, **opts)
     elif args.type == "trophy":
         import_trophy(args.template, args.obj, args.out, section=args.section, **opts)
-    else:  # auto: import_auto detecta face/trofeu pelo magic (face descarta section)
+    else:  # auto: import_auto finds face/trophy from the magic (a face ignores section)
         import_auto(args.template, args.obj, args.out, section=args.section, **opts)
 
 
@@ -234,30 +235,30 @@ def cmd_list(args) -> None:
     if args.type in FOLDER_FN:
         FOLDER_FN[args.type][0](args.input)   # list_stadium / list_kit / list_pc
         return
-    # PS2 face/trofeu (auto/face/trophy)
+    # PS2 face/trophy (auto/face/trophy)
     payload, _, _ = decompress_bin(args.input)
     kind = detect_asset_type(payload)
     if kind == "trophy":
         secs = trophy_section_offsets(payload)
-        print(f"{args.input}: PS2 trofeu — {len(secs)} secao(oes) (sub-modelos).")
+        print(f"{args.input}: PS2 trophy — {len(secs)} section(s) (sub-models).")
         for i, off in enumerate(secs):
-            print(f"  secao {i:>2}: offset 0x{off:X}"
-                  + ("  (principal)" if i == 0 else ""))
+            print(f"  section {i:>2}: offset 0x{off:X}"
+                  + ("  (main)" if i == 0 else ""))
     else:
-        print(f"{args.input}: PS2 face/cabelo — 1 modelo (use export para ver "
+        print(f"{args.input}: PS2 face/hair — 1 model (use export to see "
               "vertices/faces).")
 
 
 # ============================================================================
-# Util
+# Utilities
 # ============================================================================
 
 _PARSER = None
 
 
 def _error_fn():
-    """Devolve parser.error (usa o parser global p/ mensagens consistentes)."""
-    assert _PARSER is not None, "parser nao inicializado"
+    """Returns parser.error (uses the global parser, for consistent messages)."""
+    assert _PARSER is not None, "parser not initialized"
     return _PARSER.error
 
 
@@ -265,23 +266,24 @@ def main() -> None:
     global _PARSER
     _PARSER = build_parser()
     args = _PARSER.parse_args()
-    # Erros "esperados" (dado ruim / arquivo errado) viram alerta limpo, sem
-    # traceback. Bugs de verdade (qualquer outra excecao) ainda estouram completo.
+    # "Expected" errors (bad data / wrong file) become a clean message, with
+    # no traceback. Real bugs (any other exception) still show the full
+    # traceback.
     try:
         args.func(args)
     except FileNotFoundError as e:
-        _fail(f"arquivo nao encontrado: {e.filename or e}")
+        _fail(f"file not found: {e.filename or e}")
     except struct.error as e:
-        _fail(f"arquivo corrompido ou formato inesperado ({e}).")
+        _fail(f"corrupted file or unexpected format ({e}).")
     except (ValueError, IndexError, KeyError, NotImplementedError,
             IsADirectoryError, PermissionError) as e:
         _fail(str(e))
     except KeyboardInterrupt:
-        _fail("cancelado pelo usuario.", code=130)
+        _fail("cancelled by the user.", code=130)
 
 
 def _fail(msg: str, code: int = 1) -> None:
-    """Imprime um alerta de erro no padrao do parser e encerra."""
+    """Prints an error message in the parser style and exits."""
     prog = _PARSER.prog if _PARSER else "wepes3d"
-    print(f"{prog}: erro: {msg}", file=sys.stderr)
+    print(f"{prog}: error: {msg}", file=sys.stderr)
     sys.exit(code)

@@ -1,9 +1,9 @@
 """
-Fixtures compartilhadas da suíte.
+Shared fixtures of the test suite.
 
-- Expõe os arquivos-semente reais (em `seed/`) como fixtures.
-- Oferece geradores de `.obj` sintéticos (`write_obj`, `islands_obj`, `grid_obj`)
-  para exercitar os caminhos de import sem depender de um arquivo externo.
+- Exposes the real seed files (in `seed/`) as fixtures.
+- Offers generators of synthetic `.obj` files (`write_obj`, `islands_obj`,
+  `grid_obj`) to test the import paths without depending on an outside file.
 """
 
 import pathlib
@@ -16,12 +16,12 @@ SEED = HERE / "seed"
 
 def _seed(name: str) -> str:
     p = SEED / name
-    assert p.exists(), f"seed faltando: {p}"
+    assert p.exists(), f"missing seed: {p}"
     return str(p)
 
 
 # ---------------------------------------------------------------------------
-# Seeds reais (arquivos do jogo)
+# Real seeds (game files)
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
@@ -46,13 +46,13 @@ def stadium_str():
 
 @pytest.fixture
 def stadium_data_bin():
-    """Container de estádio SEM modelos 3D (só dados/textura)."""
+    """Stadium container WITHOUT 3D models (only data/texture)."""
     return _seed("stadium_data.bin")
 
 
 @pytest.fixture
 def adboard_bin():
-    """Container de estádio COM modelos (placas de publicidade)."""
+    """Stadium container WITH models (advertising boards)."""
     return _seed("adboard.bin")
 
 
@@ -72,15 +72,15 @@ def pc_trophy_str():
 
 
 # ---------------------------------------------------------------------------
-# Geradores de .obj sintéticos
+# Synthetic .obj generators
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
 def write_obj(tmp_path):
-    """Escreve um .obj a partir de listas de verts/uvs/faces (0-based).
+    """Writes an .obj from lists of verts/uvs/faces (0-based).
 
-    `groups`: lista paralela a `faces` com o nome do grupo de cada face — gera
-    linhas `o NOME` (usado para testar --use-groups).
+    `groups`: a list parallel to `faces` with the group name of each face — it
+    writes `o NAME` lines (used to test --use-groups).
     """
     def _w(verts, uvs, faces, groups=None, name="mesh.obj"):
         path = tmp_path / name
@@ -102,24 +102,25 @@ def write_obj(tmp_path):
 
 @pytest.fixture
 def islands_obj(write_obj):
-    """N "ilhas" independentes (quads), em ordem sequencial de vértices.
+    """N independent "islands" (quads), with the vertices in sequential order.
 
-    Cada quad são 4 vértices + 2 triângulos que ficam DENTRO do bloco de 4 —
-    então os vértices já vêm em "ilhas" sequenciais. Isso permite testar
-    --part-sizes [4,4,...] e --use-groups (1 grupo por ilha) sem que nenhum
-    triângulo cruze a fronteira.
+    Each quad is 4 vertices + 2 triangles that stay INSIDE the block of 4 —
+    so the vertices already come in sequential "islands". This lets us test
+    --part-sizes [4,4,...] and --use-groups (1 group per island) without any
+    triangle crossing a border.
     """
     def _make(n_islands=8, with_groups=False):
         verts, uvs, faces, groups = [], [], [], []
         for k in range(n_islands):
             base = len(verts)
-            ox = float(k) * 2.0           # afasta as ilhas no eixo X
+            ox = float(k) * 2.0           # moves the islands apart on the X axis
             verts += [(ox, 0.0, 0.0), (ox + 1, 0.0, 0.0),
                       (ox + 1, 1.0, 0.0), (ox, 1.0, 0.0)]
             uvs += [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
             faces += [(base, base + 1, base + 2), (base, base + 2, base + 3)]
-            # A 1ª ilha usa o grupo "default" (o parser já o registra no índice 0),
-            # então N ilhas geram EXATAMENTE N grupos — sem o "default" sobrando.
+            # The 1st island uses the "default" group (the parser already has it
+            # at index 0), so N islands create EXACTLY N groups — no extra
+            # "default" group is left over.
             name = "default" if k == 0 else f"part_{k}"
             groups += [name, name]
         return write_obj(verts, uvs, faces,
@@ -130,12 +131,12 @@ def islands_obj(write_obj):
 
 @pytest.fixture
 def ribbon_obj(write_obj):
-    """Uma fita contígua com EXATAMENTE `n_verts` vértices (n_verts par).
+    """A continuous ribbon with EXACTLY `n_verts` vertices (n_verts even).
 
-    São `n_verts/2` colunas de 2 vértices, ligadas em quads. Os triângulos
-    conectam vértices de colunas vizinhas, então eles CRUZAM as fronteiras
-    sequenciais de 87 vértices do template — forçando o fallback BFS quando a
-    contagem bate com a do template (696).
+    It has `n_verts/2` columns of 2 vertices, joined into quads. The triangles
+    join vertices of neighbour columns, so they CROSS the sequential 87-vertex
+    borders of the template — this forces the BFS fallback when the count
+    matches the template (696).
     """
     def _make(n_verts=696):
         cols = n_verts // 2
@@ -156,7 +157,7 @@ def ribbon_obj(write_obj):
 
 @pytest.fixture
 def grid_obj(write_obj):
-    """Uma malha contígua (grade n×n no plano Z=0), boa para testar o BFS."""
+    """A continuous mesh (n×n grid on the Z=0 plane), good for testing the BFS."""
     def _make(n=8):
         verts, uvs, faces = [], [], []
         for j in range(n):

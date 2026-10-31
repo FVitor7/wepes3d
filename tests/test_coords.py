@@ -1,4 +1,4 @@
-"""CoordSpace: a conversão int16<->float é uma bijeção (lossless)."""
+"""CoordSpace: the int16<->float conversion is a bijection (lossless)."""
 
 import itertools
 
@@ -14,13 +14,13 @@ from wepes3d.adapters.pes6pc.coords import (
     raw_to_obj_vertex, raw_to_obj_uv, PC_SCALE,
 )
 
-# Valores int16 representativos (extremos + comuns).
+# Representative int16 values (limits + common ones).
 SAMPLES = [-32768, -32767, -1000, -87, -1, 0, 1, 87, 1000, 32767]
 
 
 @pytest.mark.parametrize("coord", [FACE, TROPHY, STADIUM], ids=lambda c: c.name)
 def test_vertex_bijection(coord):
-    """int16 -> obj -> int16 recupera os mesmos inteiros (em todos os assets)."""
+    """int16 -> obj -> int16 gives back the same integers (for every asset)."""
     for s0, s1, s2 in itertools.islice(
             itertools.product(SAMPLES, SAMPLES, SAMPLES), 0, None, 7):
         x, y, z = coord.int16_to_obj_vertex(s0, s1, s2)
@@ -43,7 +43,7 @@ def test_uv_bijection():
 
 
 def test_uv_v_is_flipped():
-    # V invertido: stored 0 -> obj 1.0
+    # V flipped: stored 0 -> obj 1.0
     u, v = int16_to_obj_uv(0, 0)
     assert v == 1.0
 
@@ -55,7 +55,7 @@ def test_clamp16_saturates():
 
 
 def test_face_known_vertex():
-    # vert0 de examples/face.bin (stored y,z,x = 293,-1110,0) -> obj conferido.
+    # vert0 of examples/face.bin (stored y,z,x = 293,-1110,0) -> checked obj value.
     x, y, z = FACE.int16_to_obj_vertex(293, -1110, 0)
     assert round(x, 6) == 0.0
     assert round(y, 6) == -0.455029

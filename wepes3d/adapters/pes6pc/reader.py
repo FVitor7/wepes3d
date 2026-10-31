@@ -1,25 +1,26 @@
 """
-Leitor do formato de modelo PES6/WE PC (magic 20050420).
+Reader of the PES6/WE PC model format (magic 20050420).
 
-PC e PS2 sao formatos binarios DIFERENTES — este leitor NAO usa o motor PS2
-(`shared/model`, `shared/pipeline`); so a descompressao comum (`shared/io`).
+PC and PS2 are DIFFERENT binary formats — this reader does NOT use the PS2
+engine (`shared/model`, `shared/pipeline`); only the common decompression
+(`shared/io`).
 
-Estrutura (eng. reversa, ver pes6_bin_to_obj.py / pes6_trophy_to_obj.py):
+Structure (reverse engineering, see pes6_bin_to_obj.py / pes6_trophy_to_obj.py):
 
-  * FACE/CABELO: o payload tem o modelo DIRETO — payload[8] aponta o magic
-    20050420.
-  * TROFEU: o payload e um container aninhado (00060100 externo ja
-    descomprimido -> 00060000) com VARIOS modelos 20050420, um por PARTE
-    (taca, base, alcas...).
+  * FACE/HAIR: the payload has the model DIRECTLY — payload[8] points to the
+    20050420 magic.
+  * TROPHY: the payload is a nested container (outer 00060100, already
+    decompressed -> 00060000) with SEVERAL 20050420 models, one per PART
+    (cup, base, handles...).
 
-Em ambos os casos cada modelo e lido igual: localizamos os modelos por scan do
-magic e parseamos cada um com `parse_model` (ponteiros internos relativos ao
-inicio do modelo).
+In both cases each model is read the same way: we find the models by
+scanning for the magic and parse each one with `parse_model` (inner pointers
+are relative to the start of the model).
 
-Vertex groups: marcador `07 <m>` + 4xuint16 (total_tlist, vert_start,
-total_verts, total_f). O 2o byte varia (face 0x05, trofeu 0x26); achamos qual
-faz as somas fecharem (sum total_verts == vc, sum total_tlist == tri_total).
-Indices do strip sao GLOBAIS (nao somar vert_start).
+Vertex groups: marker `07 <m>` + 4xuint16 (total_tlist, vert_start,
+total_verts, total_f). The 2nd byte changes (face 0x05, trophy 0x26); we find
+the one that makes the sums match (sum total_verts == vc, sum total_tlist ==
+tri_total). The strip indices are GLOBAL (do not add vert_start).
 """
 
 import struct
@@ -27,7 +28,7 @@ from typing import List, Tuple
 
 from .coords import raw_to_obj_vertex, raw_to_obj_uv
 
-MODEL_MAGIC = bytes([0x20, 0x05, 0x04, 0x20])   # modelo PES6 PC
+MODEL_MAGIC = bytes([0x20, 0x05, 0x04, 0x20])   # PES6 PC model
 
 Vert = Tuple[float, float, float]
 UV = Tuple[float, float]
@@ -35,10 +36,10 @@ Face = Tuple[int, int, int]
 
 
 def find_parts(payload: bytes) -> List[int]:
-    """Offsets de cada modelo PES6 PC (magic 20050420) no payload.
+    """Offsets of each PES6 PC model (magic 20050420) in the payload.
 
-    Face -> 1 offset; trofeu -> N (um por parte). Scan robusto (nao depende de
-    navegar o diretorio do container)."""
+    Face -> 1 offset; trophy -> N (one per part). Robust scan (it does not
+    depend on walking the container directory)."""
     parts = []
     pos = 0
     while True:
@@ -52,11 +53,11 @@ def find_parts(payload: bytes) -> List[int]:
 
 def find_vertex_groups(hdr_block: bytes, vc: int, tri_total: int):
     """
-    Tabela de vertex groups dentro do bloco header de um modelo.
+    Table of vertex groups inside the header block of a model.
 
-    Cada grupo: `07 <m>` + 4xuint16 (total_tlist, vert_start, total_verts,
-    total_f). Descobrimos o marcador <m> validando as somas. Devolve lista de
-    (total_tlist, vert_start, total_verts, total_f) ou None.
+    Each group: `07 <m>` + 4xuint16 (total_tlist, vert_start, total_verts,
+    total_f). We find the <m> marker by checking the sums. Returns a list of
+    (total_tlist, vert_start, total_verts, total_f), or None.
     """
     candidates = {hdr_block[j + 1]
                   for j in range(len(hdr_block) - 9)
@@ -81,13 +82,13 @@ def find_vertex_groups(hdr_block: bytes, vc: int, tri_total: int):
 
 def parse_model(payload: bytes, off1: int) -> Tuple[List[Vert], List[UV], List[Face]]:
     """
-    Le UM modelo PES6 PC que comeca em `off1` (magic 20050420).
-    Devolve (verts, uvs, faces) ja no espaco OBJ.
+    Reads ONE PES6 PC model that starts at `off1` (magic 20050420).
+    Returns (verts, uvs, faces), already in OBJ space.
     """
     magic = payload[off1:off1 + 4]
     if magic != MODEL_MAGIC:
-        raise ValueError(f"offset {off1:#x} nao tem magic de modelo PES6 PC "
-                         f"(achei {magic.hex()}).")
+        raise ValueError(f"offset {off1:#x} has no PES6 PC model magic "
+                         f"(found {magic.hex()}).")
 
     end_of_header, _, _mat_info, vertex_off, idx_off, header_start = \
         struct.unpack_from("<6I", payload, off1 + 4)
@@ -99,11 +100,11 @@ def parse_model(payload: bytes, off1: int) -> Tuple[List[Vert], List[UV], List[F
     vc = struct.unpack_from("<H", payload, vertex_off + 8)[0]
     tri_total = struct.unpack_from("<H", payload, idx_off)[0]
 
-    # --- vertex groups (quebram o strip nos limites de grupo) ---
+    # --- vertex groups (they break the strip at the group borders) ---
     hdr_block = payload[header_start:end_of_header]
     groups = find_vertex_groups(hdr_block, vc, tri_total)
     if groups is None:
-        groups = [(tri_total, 0, vc, 0)]   # fallback: 1 grupo unico
+        groups = [(tri_total, 0, vc, 0)]   # fallback: a single group
 
     vg_ranges = []
     tri_counter = 0
@@ -122,19 +123,19 @@ def parse_model(payload: bytes, off1: int) -> Tuple[List[Vert], List[UV], List[F
         raw_x, raw_y, raw_z = struct.unpack_from("<3f", payload, cursor)
         cursor += 12
         verts.append(raw_to_obj_vertex(raw_x, raw_y, raw_z))
-        cursor += vs - 20            # padding / normais / pesos
+        cursor += vs - 20            # padding / normals / weights
         u, v = struct.unpack_from("<2f", payload, cursor)
         cursor += 8
         uvs.append(raw_to_obj_uv(u, v))
 
-    # --- indices (triangle strip por grupo) ---
+    # --- indices (triangle strip per group) ---
     tlist = struct.unpack_from(f"<{tri_total}H", payload, idx_off + 2)
     faces: List[Face] = []
     for ts, te in vg_ranges:
         strip = tlist[ts:te]
         for i in range(len(strip) - 2):
             a, b, c = strip[i], strip[i + 1], strip[i + 2]
-            if a != b and b != c and a != c:    # pula degenerados (restart)
-                faces.append((c, b, a))          # winding invertido (= plugin)
+            if a != b and b != c and a != c:    # skips degenerate ones (restart)
+                faces.append((c, b, a))          # reversed winding (= plugin)
 
     return verts, uvs, faces

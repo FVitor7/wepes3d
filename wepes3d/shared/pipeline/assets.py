@@ -1,17 +1,18 @@
 """
-AssetProfile: a interface entre o motor (shared) e cada tipo de asset.
+AssetProfile: the interface between the engine (shared) and each asset type.
 
-O motor (pipeline._import/_export) eh asset-agnostico: recebe um AssetProfile
-que encapsula as UNICAS diferencas entre face e trofeu:
+The engine (pipeline._import/_export) is asset-agnostic: it receives an
+AssetProfile that holds the ONLY differences between faces and trophies:
 
-  - coord        : sistema de coordenadas (CoordSpace).
-  - max_parts    : limite de parts (face=8; trofeu=None).
-  - locate       : (payload, section) -> offset absoluto do MAGIC_MODEL.
-  - patch_resize : corrige ponteiros do container quando as parts mudam de tamanho.
-  - list_sections: (payload) -> offsets dos sub-modelos, ou None se nao aplicavel.
+  - coord        : coordinate system (CoordSpace).
+  - max_parts    : parts limit (face=8; trophy=None).
+  - locate       : (payload, section) -> absolute offset of the MAGIC_MODEL.
+  - patch_resize : fixes the container pointers when the parts change size.
+  - list_sections: (payload) -> offsets of the sub-models, or None if it does
+                   not apply.
 
-As IMPLEMENTACOES vivem em `faces/profile.py` (FACE_PROFILE) e
-`trophy/profile.py` (TROPHY_PROFILE).
+The IMPLEMENTATIONS live in `adapters/pesweps2/faces/profile.py`
+(FACE_PROFILE) and `adapters/pesweps2/trophies/profile.py` (TROPHY_PROFILE).
 """
 
 from dataclasses import dataclass
@@ -25,10 +26,10 @@ class AssetProfile:
     name: str
     coord: CoordSpace
     max_parts: Optional[int]
-    # locate(payload, section) -> model_offset (offset do 03 00 FF FF)
+    # locate(payload, section) -> model_offset (offset of 03 00 FF FF)
     locate: Callable[[bytes, int], int]
     # patch_resize(payload, model_offset, pre_parts_size, orig_end, new_end)
     #   -> (payload, n_patched)
     patch_resize: Callable[[bytes, int, int, int, int], Tuple[bytes, int]]
-    # list_sections(payload) -> [model_offset, ...] (trofeu) ou None (face)
+    # list_sections(payload) -> [model_offset, ...] (trophy) or None (face)
     list_sections: Optional[Callable[[bytes], List[int]]] = None

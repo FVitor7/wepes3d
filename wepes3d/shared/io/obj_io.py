@@ -1,33 +1,35 @@
 """
-Leitura de arquivos .obj (Wavefront OBJ).
+Reading of .obj files (Wavefront OBJ).
 
-Formato minimo suportado:
-  v  X Y Z      (vertice float)
-  vt U V        (UV float)
-  vn NX NY NZ   (normal float — IGNORADAS pelo script, recalculadas)
-  g NOME        (inicio de grupo)
-  o NOME        (inicio de objeto)
-  f a/b/c d/e/f g/h/i   (triangulo com 3 indices 1-based)
-  f a d g       (triangulo com so indices de vertice)
+Minimal supported format:
+  v  X Y Z      (float vertex)
+  vt U V        (float UV)
+  vn NX NY NZ   (float normal — IGNORED, normals are computed again)
+  g NAME        (start of a group)
+  o NAME        (start of an object)
+  f a/b/c d/e/f g/h/i   (triangle with 3 1-based indices)
+  f a d g       (triangle with vertex indices only)
 
-1 UV POR VERTICE (o pipeline exige):
-  - Quando as faces usam indices de v e vt diferentes (export do Blender, UV
-    seams), cada par (v, vt) unico vira um vertice — duplicado nos seams.
-    Arquivos ja alinhados (v == vt, como os do export) passam intactos.
-  - Se as faces nao referenciam vt e o numero de UVs difere do de vertices,
-    o pipeline aborta com mensagem clara (reexportar o .obj com UVs).
+1 UV PER VERTEX (the pipeline needs this):
+  - When the faces use different v and vt indices (Blender export, UV
+    seams), each unique (v, vt) pair becomes its own vertex — duplicated at
+    the seams. Files that are already aligned (v == vt, like the ones our
+    export writes) are kept as they are.
+  - If the faces do not reference vt and the number of UVs is different from
+    the number of vertices, the pipeline stops with a clear message
+    (export the .obj again with UVs).
 
-TRIANGULACAO AUTOMATICA:
-  - Faces com >3 vertices sao automaticamente trianguladas via FAN
-    triangulation: poligono [v0, v1, ..., vN-1] vira triangulos
+AUTOMATIC TRIANGULATION:
+  - Faces with >3 vertices are triangulated automatically with FAN
+    triangulation: the polygon [v0, v1, ..., vN-1] becomes the triangles
     (v0, v1, v2), (v0, v2, v3), ..., (v0, vN-2, vN-1).
-  - Funciona perfeitamente para poligonos CONVEXOS (caso comum de exports
-    do Blender). Para poligonos concavos, fan pode gerar triangulos
-    sobrepostos — triangule no Blender (Mesh > Triangulate Faces) primeiro.
+  - Works well for CONVEX polygons (the usual case in Blender exports). For
+    concave polygons the fan can create overlapping triangles — triangulate
+    in Blender first (Mesh > Triangulate Faces).
 
-CONVERSAO 1 UV POR VERTICE (`convert_obj_to_vertex_uv`):
-  - Grava em disco o mesmo alinhamento que o `parse_obj` faz na leitura, no
-    formato `f i/i` — util para conferir no Blender o que o import enxerga.
+1 UV PER VERTEX CONVERSION (`convert_obj_to_vertex_uv`):
+  - Writes to disk the same alignment that `parse_obj` does while reading, in
+    the `f i/i` format — useful to check in Blender what the import sees.
 """
 
 from dataclasses import dataclass
@@ -36,30 +38,30 @@ from typing import List, Tuple
 
 @dataclass
 class ObjMesh:
-    """Conteudo essencial de um .obj para o pipeline de importacao."""
+    """The essential content of an .obj file for the import pipeline."""
     vertices: List[Tuple[float, float, float]]
     uvs: List[Tuple[float, float]]
     faces: List[Tuple[int, int, int]]
-    """Triangulos: tuplas de 3 indices 0-based no array `vertices`."""
+    """Triangles: tuples of 3 0-based indices into the `vertices` array."""
 
     face_groups: List[int]
-    """Indice do grupo a que cada face pertence (paralelo a `faces`)."""
+    """Index of the group of each face (parallel to `faces`)."""
 
     group_names: List[str]
-    """Nomes dos grupos por indice. group_names[i] = nome do grupo `i`."""
+    """Group names by index. group_names[i] = name of group `i`."""
 
 
 def parse_obj(filepath: str) -> ObjMesh:
     """
-    Parser minimalista de .obj.
+    Minimal .obj parser.
 
-    Grupos: linhas 'g NOME' ou 'o NOME' iniciam um novo grupo. Cada `f`
-    subsequente eh associado a esse grupo. Util para `--use-groups` que
-    mapeia 1 grupo do .obj -> 1 part do PS2.
+    Groups: 'g NAME' or 'o NAME' lines start a new group. Each following `f`
+    belongs to that group. Useful for `--use-groups`, which maps 1 group of
+    the .obj -> 1 PS2 part.
 
-    UVs: segue o indice `vt` de cada canto da face (ver `_unify_vertex_uv`) —
-    antes o UV era tomado pela posicao do vertice, o que embaralhava as UVs
-    de .obj exportados do Blender.
+    UVs: follows the `vt` index of each face corner (see `_unify_vertex_uv`)
+    — before, the UV was taken from the vertex position, which mixed up the
+    UVs of .obj files exported from Blender.
     """
     vertices, uvs, polygons, poly_groups, group_names = _read_obj(filepath)
     vertices, uvs, polygons = _unify_vertex_uv(vertices, uvs, polygons)
@@ -67,14 +69,14 @@ def parse_obj(filepath: str) -> ObjMesh:
     faces: List[Tuple[int, int, int]] = []
     face_groups: List[int] = []
 
-    triangulated_count = 0   # quantas faces precisaram de fan triangulation
-    extra_tris_from_fan = 0  # quantos triangulos extras geramos
+    triangulated_count = 0   # how many faces needed fan triangulation
+    extra_tris_from_fan = 0  # how many extra triangles we created
 
     for poly, group in zip(polygons, poly_groups):
-        # Fan triangulation: gera (poly[0], poly[i], poly[i+1])
-        # Para tri (len=3) eh um pass-through.
-        # Para quad (len=4) gera 2 tris.
-        # Para n-gono gera (n - 2) tris.
+        # Fan triangulation: creates (poly[0], poly[i], poly[i+1])
+        # For a tri (len=3) nothing changes.
+        # For a quad (len=4) it creates 2 tris.
+        # For an n-gon it creates (n - 2) tris.
         if len(poly) > 3:
             triangulated_count += 1
             extra_tris_from_fan += (len(poly) - 3)
@@ -84,8 +86,8 @@ def parse_obj(filepath: str) -> ObjMesh:
             face_groups.append(group)
 
     if triangulated_count > 0:
-        print(f"      [INFO] {triangulated_count} face(s) com >3 vertices trianguladas "
-              f"(fan triangulation) — +{extra_tris_from_fan} triangulos.")
+        print(f"      [INFO] {triangulated_count} face(s) with >3 vertices triangulated "
+              f"(fan triangulation) — +{extra_tris_from_fan} triangles.")
 
     return ObjMesh(vertices=vertices, uvs=uvs, faces=faces,
                    face_groups=face_groups, group_names=group_names)
@@ -93,18 +95,18 @@ def parse_obj(filepath: str) -> ObjMesh:
 
 def convert_obj_to_vertex_uv(input_path: str, output_path: str) -> None:
     """
-    Reescreve um .obj com 1 UV por vertice: cada par (v, vt) unico vira um
-    vertice e as faces passam a usar o MESMO indice para v e vt (`f i/i`).
+    Rewrites an .obj with 1 UV per vertex: each unique (v, vt) pair becomes a
+    vertex, and the faces use the SAME index for v and vt (`f i/i`).
 
-    O import ja faz esse alinhamento na leitura (`parse_obj`); esta funcao o
-    grava em disco — util para conferir no Blender o que o import enxerga ou
-    para ferramentas que exigem v e vt alinhados. Preserva grupos (`o`/`g`) e
-    poligonos (nao triangula); descarta normais e materiais. Um .obj ja
-    alinhado sai com os vertices na mesma ordem.
+    The import already does this alignment while reading (`parse_obj`); this
+    function writes it to disk — useful to check in Blender what the import
+    sees, or for tools that need v and vt to be aligned. It keeps groups
+    (`o`/`g`) and polygons (it does not triangulate); it drops normals and
+    materials. An .obj that is already aligned keeps the same vertex order.
     """
     vertices, uvs, polygons, poly_groups, group_names = _read_obj(input_path)
     if not uvs:
-        raise ValueError(f"{input_path}: o .obj nao tem UVs (linhas 'vt').")
+        raise ValueError(f"{input_path}: the .obj has no UVs ('vt' lines).")
     vertices, uvs, polygons = _unify_vertex_uv(vertices, uvs, polygons)
 
     with open(output_path, 'w') as f:
@@ -120,15 +122,15 @@ def convert_obj_to_vertex_uv(input_path: str, output_path: str) -> None:
             f.write("f " + " ".join(f"{i + 1}/{i + 1}" for i in poly) + "\n")
 
     print(f"{output_path}: {len(vertices)} vertices, {len(uvs)} UVs, "
-          f"{len(polygons)} faces (1 UV por vertice).")
+          f"{len(polygons)} faces (1 UV per vertex).")
 
 
 def _read_obj(filepath: str):
     """
-    Le v/vt/g/o/f. Devolve (vertices, uvs, polygons, poly_groups, group_names);
-    cada polygon eh a lista de pares (v, vt) 0-based dos seus cantos — vt = v
-    quando a face nao referencia UV (`f 1 2 3` ou `f 1//1 ...`). Faces com
-    menos de 3 vertices (degeneradas) sao ignoradas.
+    Reads v/vt/g/o/f. Returns (vertices, uvs, polygons, poly_groups,
+    group_names); each polygon is the list of 0-based (v, vt) pairs of its
+    corners — vt = v when the face does not reference a UV (`f 1 2 3` or
+    `f 1//1 ...`). Faces with fewer than 3 vertices (degenerate) are ignored.
     """
     vertices: List[Tuple[float, float, float]] = []
     uvs: List[Tuple[float, float]] = []
@@ -156,7 +158,7 @@ def _read_obj(filepath: str):
                     group_map[name] = len(group_map)
                 current_group = group_map[name]
             elif tag == 'f':
-                # Coleta TODOS os cantos da face (nao trunca em 3).
+                # Collects ALL the corners of the face (does not stop at 3).
                 poly: List[Tuple[int, int]] = []
                 for token in tokens[1:]:
                     fields = token.split('/')
@@ -176,13 +178,14 @@ def _read_obj(filepath: str):
 
 def _unify_vertex_uv(vertices, uvs, polygons):
     """
-    Garante 1 UV por vertice: cada par (v, vt) unico referenciado pelas faces
-    vira um vertice proprio — o vertice eh duplicado nos seams de UV.
+    Makes sure there is 1 UV per vertex: each unique (v, vt) pair used by the
+    faces becomes its own vertex — the vertex is duplicated at UV seams.
 
-    Se todos os cantos ja usam vt == v (ex.: .obj gerado pelo export), devolve
-    vertices/UVs intactos e na mesma ordem. Senao, os vertices novos seguem a
-    ordem da 1a aparicao nas faces (vertices que nenhuma face usa somem).
-    Devolve (vertices, uvs, polygons) com cada polygon como lista de indices.
+    If every corner already uses vt == v (e.g. an .obj written by our export),
+    it returns the vertices/UVs unchanged and in the same order. Otherwise
+    the new vertices follow the order in which they first appear in the faces
+    (vertices that no face uses are dropped). Returns (vertices, uvs,
+    polygons), with each polygon as a list of indices.
     """
     if all(v == vt for poly in polygons for v, vt in poly):
         return vertices, uvs, [[v for v, _ in poly] for poly in polygons]
@@ -201,6 +204,6 @@ def _unify_vertex_uv(vertices, uvs, polygons):
             new_poly.append(index_of[key])
         new_polygons.append(new_poly)
 
-    print(f"      [INFO] indices v/vt diferentes nas faces: {len(vertices)} vertices "
-          f"-> {len(new_vertices)} (1 por par v/vt; duplicados nos seams de UV).")
+    print(f"      [INFO] faces use different v/vt indices: {len(vertices)} vertices "
+          f"-> {len(new_vertices)} (1 per v/vt pair; duplicated at UV seams).")
     return new_vertices, new_uvs, new_polygons

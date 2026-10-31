@@ -1,27 +1,27 @@
 """
-Particionamento do mesh em parts do PS2.
+Splitting the mesh into PS2 parts.
 
-O .bin tem N parts (no template face.bin = 8 parts × 87 vertices = 696 vertices
-total). Cada part eh uma "ilha" — todos os triangulos de uma part tem seus 3
-vertices DENTRO da part (nao cruzam fronteiras).
+The .bin has N parts (in the face.bin template = 8 parts × 87 vertices = 696
+vertices in total). Each part is an "island" — every triangle of a part has
+its 3 vertices INSIDE the part (triangles do not cross part borders).
 
-Quando o .obj importado tem mais ou menos vertices que o template, eh
-necessario REDISTRIBUIR. Tres estrategias suportadas:
+When the imported .obj has more or fewer vertices than the template, they
+must be DISTRIBUTED again. Three strategies are supported:
 
-  1. BFS por adjacencia      — `partition_mesh_by_faces`
-     Cresce parts a partir de uma face semente, expandindo pelos vizinhos.
-     Bom default sem informacao adicional do usuario.
+  1. BFS by adjacency          — `partition_mesh_by_faces`
+     Grows parts from a seed face, expanding through the neighbours.
+     A good default when the user gives no extra information.
 
-  2. Por grupos OBJ          — `partition_by_obj_groups`
-     Cada grupo 'g'/'o' do .obj vira uma part. Controle manual no Blender:
-     separe o rosto em N objetos antes de exportar.
+  2. By OBJ groups             — `partition_by_obj_groups`
+     Each 'g'/'o' group of the .obj becomes a part. Manual control in
+     Blender: split the face into N objects before exporting.
 
-  3. Nearest-neighbor do template — `partition_by_template`
-     Cada vertice do .obj eh atribuido a part do vertice template mais
-     proximo. Preserva a topologia anatomica esperada pelo PES.
+  3. Nearest neighbour of the template — `partition_by_template`
+     Each .obj vertex goes to the part of the closest template vertex. Keeps
+     the anatomical layout that PES expects.
 
-Em todos os casos, vertices em "seams" (fronteiras entre parts) sao
-DUPLICADOS, com UV e posicao identicas — apenas o indice eh duplicado.
+In all cases, vertices on "seams" (borders between parts) are DUPLICATED,
+with the same UV and position — only the index is duplicated.
 """
 
 from collections import defaultdict, deque, Counter
@@ -29,11 +29,11 @@ from typing import Callable, List, Tuple
 
 
 # ============================================================================
-# Calculo de ranges (start, end) por part
+# (start, end) ranges per part
 # ============================================================================
 
 def compute_new_ranges_from_sizes(sizes: List[int]) -> List[Tuple[int, int]]:
-    """Converte uma lista de tamanhos em ranges [(start, end_exclusive)]."""
+    """Converts a list of sizes into ranges [(start, end_exclusive)]."""
     ranges = []
     cumulative = 0
     for s in sizes:
@@ -43,7 +43,7 @@ def compute_new_ranges_from_sizes(sizes: List[int]) -> List[Tuple[int, int]]:
 
 
 # ============================================================================
-# Atribuicao de triangulos as parts (apos definir ranges)
+# Assigning triangles to parts (after the ranges are set)
 # ============================================================================
 
 def assign_triangles_to_parts(
@@ -51,11 +51,11 @@ def assign_triangles_to_parts(
     part_ranges: List[Tuple[int, int]],
 ) -> List[List[Tuple[int, int, int]]]:
     """
-    Atribui cada triangulo a sua part: requer que TODOS os 3 vertices
-    estejam dentro do mesmo range. Triangulos que cruzam fronteiras
-    geram ValueError com mensagem clara.
+    Assigns each triangle to its part: ALL 3 vertices must be inside the same
+    range. Triangles that cross a border raise a ValueError with a clear
+    message.
 
-    Retorna triangulos LOCAIS (indices relativos ao inicio da part).
+    Returns LOCAL triangles (indices relative to the start of the part).
     """
     per_part = [[] for _ in part_ranges]
 
@@ -69,14 +69,14 @@ def assign_triangles_to_parts(
         pa, pb, pc = find_part(a), find_part(b), find_part(c)
         if pa is None or pb is None or pc is None:
             raise ValueError(
-                f"Triangulo {tri_idx}: vertice(s) fora dos ranges "
+                f"Triangle {tri_idx}: vertex(es) outside the ranges "
                 f"(v{a}->p{pa}, v{b}->p{pb}, v{c}->p{pc})"
             )
         if pa != pb or pa != pc:
             raise ValueError(
-                f"Triangulo {tri_idx} (v{a}, v{b}, v{c}) cruza fronteira de parts:\n"
+                f"Triangle {tri_idx} (v{a}, v{b}, v{c}) crosses a part border:\n"
                 f"  v{a} -> part {pa}\n  v{b} -> part {pb}\n  v{c} -> part {pc}\n"
-                f"Use --allow-recount para recalcular fronteiras automaticamente."
+                f"Use --allow-recount to compute the borders again automatically."
             )
         start = part_ranges[pa][0]
         per_part[pa].append((a - start, b - start, c - start))
@@ -85,7 +85,7 @@ def assign_triangles_to_parts(
 
 
 # ============================================================================
-# Estrategia 1: BFS por adjacencia de faces
+# Strategy 1: BFS by face adjacency
 # ============================================================================
 
 def partition_mesh_by_faces(
@@ -95,14 +95,14 @@ def partition_mesh_by_faces(
     n_parts: int,
 ) -> Tuple[List, List, List[Tuple[int, int, int]], List[int]]:
     """
-    Particiona em n_parts usando BFS por adjacencia de faces.
+    Splits into n_parts with a BFS over face adjacency.
 
-    1. Constroi grafo: face -> faces vizinhas (compartilham 1+ vertice).
-    2. Para cada part, BFS a partir de uma face nao-atribuida ate atingir
-       o target (n_faces / n_parts).
-    3. Re-indexa: vertices usados em multiplas parts sao DUPLICADOS.
+    1. Builds a graph: face -> neighbour faces (sharing 1+ vertex).
+    2. For each part, runs a BFS from an unassigned face until it reaches the
+       target (n_faces / n_parts).
+    3. Re-indexes: vertices used in several parts are DUPLICATED.
 
-    Retorna (new_vertices, new_uvs, new_faces_global, sizes_per_part).
+    Returns (new_vertices, new_uvs, new_faces_global, sizes_per_part).
     """
     n_faces = len(faces)
     target = max(1, n_faces // n_parts)
@@ -148,7 +148,7 @@ def partition_mesh_by_faces(
 
 
 # ============================================================================
-# Estrategia 2: por grupos OBJ
+# Strategy 2: by OBJ groups
 # ============================================================================
 
 def partition_by_obj_groups(
@@ -159,9 +159,9 @@ def partition_by_obj_groups(
     n_groups: int,
 ) -> Tuple[List, List, List[Tuple[int, int, int]], List[int]]:
     """
-    Cada grupo 'g'/'o' do .obj vira uma part. O numero de grupos deve ser
-    igual ao numero de parts desejadas. Permite controle manual fino no
-    Blender: separe a malha em N objetos, exporte como OBJ multi-object.
+    Each 'g'/'o' group of the .obj becomes a part. The number of groups must
+    be the same as the number of parts you want. Gives fine manual control in
+    Blender: split the mesh into N objects and export a multi-object OBJ.
     """
     part_face_lists: List[List[int]] = [[] for _ in range(n_groups)]
     for fi, gidx in enumerate(face_groups):
@@ -171,7 +171,7 @@ def partition_by_obj_groups(
 
 
 # ============================================================================
-# Estrategia 3: nearest-neighbor do template
+# Strategy 3: nearest neighbour of the template
 # ============================================================================
 
 def partition_by_template(
@@ -182,16 +182,16 @@ def partition_by_template(
     int16_to_obj: Callable,
 ) -> Tuple[List, List, List[Tuple[int, int, int]], List[int]]:
     """
-    Cada vertice do mesh novo eh atribuido ao mesmo part_idx do vertice
-    template mais proximo (no espaco OBJ). Triangulos sao atribuidos pela
-    MAIORIA dos 3 votos dos seus vertices.
+    Each vertex of the new mesh gets the same part_idx as the closest template
+    vertex (in OBJ space). Each triangle goes where the MAJORITY of the 3
+    votes of its vertices points.
 
-    Pre-condicao: vertices devem estar no mesmo espaco do template — use
-    junto com `auto_fit_vertices` que centra/escala.
+    Precondition: the vertices must be in the same space as the template —
+    use it together with `auto_fit_vertices`, which centers/scales them.
 
-    Vantagem: preserva a topologia anatomica esperada pelo PES (P0 = lado
-    direito frontal, P1 = lado esquerdo frontal, etc.). BFS puro pode
-    criar parts desbalanceadas que nao casam com a regiao anatomica.
+    Advantage: keeps the anatomical layout that PES expects (P0 = front right
+    side, P1 = front left side, etc.). Plain BFS can create unbalanced parts
+    that do not match the anatomical regions.
     """
     template_verts: List[Tuple[float, float, float]] = []
     template_part_of: List[int] = []
@@ -224,12 +224,12 @@ def partition_by_template(
             seams += 1
         part_face_lists[winner].append(fi)
 
-    print(f"      Triangulos cross-part (seams): {seams}/{len(faces)}")
+    print(f"      Cross-part triangles (seams): {seams}/{len(faces)}")
     return _reindex_partition(vertices, uvs, faces, part_face_lists, n_parts)
 
 
 # ============================================================================
-# Helper interno: re-indexa o particionamento
+# Internal helper: re-indexes the partition
 # ============================================================================
 
 def _reindex_partition(
@@ -240,11 +240,11 @@ def _reindex_partition(
     n_parts: int,
 ) -> Tuple[List, List, List[Tuple[int, int, int]], List[int]]:
     """
-    A partir de uma atribuicao face -> part, re-indexa todos os vertices.
+    From a face -> part assignment, re-indexes all vertices.
 
-    Vertices em seams (compartilhados entre parts) sao DUPLICADOS — cada
-    part recebe sua propria copia, com a mesma posicao e UV. Apos isso,
-    os indices das faces sao convertidos para GLOBAL (offset cumulativo).
+    Vertices on seams (shared between parts) are DUPLICATED — each part gets
+    its own copy, with the same position and UV. After that, the face indices
+    are turned into GLOBAL indices (cumulative offset).
     """
     new_verts: List = []
     new_uvs_out: List = []

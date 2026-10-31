@@ -1,4 +1,4 @@
-"""Export .bin/.str -> .obj para os 5 tipos de asset + variações."""
+"""Export .bin/.str -> .obj for the 5 asset types + variations."""
 
 import os
 
@@ -37,7 +37,7 @@ def test_export_face(face_bin, tmp_path):
     export_face(face_bin, str(out))
     v, vt, f = count_obj(out)
     assert (v, f) == (696, 984)
-    assert (tmp_path / "face.mtl").exists()           # gera .mtl
+    assert (tmp_path / "face.mtl").exists()           # writes the .mtl
 
 
 def test_export_face_no_mtl(face_bin, tmp_path):
@@ -76,8 +76,8 @@ def test_export_trophy_other_section(trophy_bin, tmp_path):
 
 
 def test_export_all_trophy_sections(trophy_bin, tmp_path):
-    # exporta TODAS as 9 seções (sub-modelos). Algumas usam formatos de vértice
-    # diferentes (V3-32 / bloco extra de UV) — exercita esses ramos do leitor.
+    # exports ALL 9 sections (sub-models). Some use different vertex formats
+    # (V3-32 / extra UV block) — this exercises those branches of the reader.
     payload, _, _ = decompress_bin(trophy_bin)
     n = len(trophy_section_offsets(payload))
     assert n == 9
@@ -90,11 +90,11 @@ def test_export_all_trophy_sections(trophy_bin, tmp_path):
 def test_export_auto_trophy(trophy_bin, tmp_path):
     out = tmp_path / "ta.obj"
     export_auto(trophy_bin, str(out))
-    assert count_obj(out)[0] == 1416                  # detecta troféu e exporta sec0
+    assert count_obj(out)[0] == 1416                  # detects the trophy and exports sec0
 
 
 # ---------------------------------------------------------------------------
-# STADIUM (.str = bloco único; .bin = container)
+# STADIUM (.str = single block; .bin = container)
 # ---------------------------------------------------------------------------
 
 def test_stadium_str_complete(stadium_str, tmp_path):
@@ -108,7 +108,7 @@ def test_stadium_index_and_list(stadium_str, capsys):
     idx = stadium_index(stadium_str)
     assert len(idx) >= 1
     list_stadium(stadium_str)
-    assert "modelo" in capsys.readouterr().out
+    assert "model" in capsys.readouterr().out
 
 
 def test_stadium_model_and_parts(stadium_str, tmp_path):
@@ -127,7 +127,7 @@ def test_stadium_scene(stadium_str, tmp_path):
 
 def test_stadium_container_with_models(adboard_bin, tmp_path, capsys):
     list_stadium(adboard_bin)
-    assert "modelo" in capsys.readouterr().out
+    assert "model" in capsys.readouterr().out
     out = tmp_path / "ad.obj"
     export_stadium_complete(adboard_bin, str(out))
     assert count_obj(out)[0] > 0
@@ -137,7 +137,7 @@ def test_stadium_container_zero_models(stadium_data_bin, capsys):
     idx = stadium_index(stadium_data_bin)
     assert isinstance(idx, list)
     list_stadium(stadium_data_bin)
-    assert "0 modelo" in capsys.readouterr().out
+    assert "0 model" in capsys.readouterr().out
 
 
 def test_stadium_groups_dedup(adboard_bin, tmp_path):
@@ -150,7 +150,7 @@ def test_stadium_groups_dedup(adboard_bin, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# KIT (mesma engine; coordenada da face)
+# KIT (same engine; face coordinates)
 # ---------------------------------------------------------------------------
 
 def test_kit_complete(kit_bin, tmp_path):
@@ -164,7 +164,7 @@ def test_kit_index_list_model_parts_scene(kit_bin, tmp_path, capsys):
     idx = kit_index(kit_bin)
     assert len(idx) >= 1
     list_kit(kit_bin)
-    assert "modelo" in capsys.readouterr().out
+    assert "model" in capsys.readouterr().out
     export_kit(kit_bin, str(tmp_path / "km.obj"), model=0)
     export_kit_parts(kit_bin, str(tmp_path / "kp"))
     export_kit_scene([kit_bin], str(tmp_path / "ks.obj"))
@@ -179,7 +179,7 @@ def test_kit_groups_and_dedup(kit_bin, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# PES6 PC (face = 1 modelo; troféu = N partes)
+# PES6 PC (face = 1 model; trophy = N parts)
 # ---------------------------------------------------------------------------
 
 def test_pc_face(pc_face_bin, tmp_path):
@@ -191,14 +191,14 @@ def test_pc_face(pc_face_bin, tmp_path):
 
 def test_pc_face_list(pc_face_bin, capsys):
     list_pc(pc_face_bin)
-    assert "face" in capsys.readouterr().out          # 1 modelo -> "face"
+    assert "face" in capsys.readouterr().out          # 1 model -> "face"
 
 
 def test_pc_trophy_complete_and_parts(pc_trophy_str, tmp_path, capsys):
     idx = pc_index(pc_trophy_str)
     assert len(idx) == 9
     list_pc(pc_trophy_str)
-    assert "trofeu" in capsys.readouterr().out
+    assert "trophy" in capsys.readouterr().out
     export_pc_complete(pc_trophy_str, str(tmp_path / "pcc.obj"))
     export_pc_parts(pc_trophy_str, str(tmp_path / "pcp"))
     assert (tmp_path / "pcc.obj").exists()
@@ -216,6 +216,6 @@ def test_pc_invalid_model_raises(pc_face_bin, tmp_path):
 
 
 def test_pc_non_pc_file_raises(face_bin, tmp_path):
-    # face PS2 não tem magic PC 20050420 -> erro claro
+    # a PS2 face has no PC 20050420 magic -> clear error
     with pytest.raises(ValueError):
         export_pc(face_bin, str(tmp_path / "x.obj"))

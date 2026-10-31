@@ -1,14 +1,14 @@
 """
-Motor de IMPORT .obj -> .bin (parametrizado por AssetProfile).
+IMPORT engine .obj -> .bin (driven by an AssetProfile).
 
-Fluxo:
-  [1] Le o template .bin     -> model.parser
-  [2] Le o .obj              -> io.obj_io
-  [3] Auto-fit (opcional)    -> escala/centra para o bbox do template
-  [4] Particionamento        -> decide quantos vertices por part e quais
-  [5] Recalcula normais      -> opcional (--recalculate-normals)
-  [6] Codifica + reconstroi parts
-  [7] Patcha pre_parts e escreve o .bin novo
+Flow:
+  [1] Reads the template .bin  -> model.parser
+  [2] Reads the .obj           -> io.obj_io
+  [3] Auto-fit (optional)      -> scales/centers into the template bbox
+  [4] Partitioning             -> decides how many vertices go to each part
+  [5] Recalculates normals     -> optional (--recalculate-normals)
+  [6] Encodes + rebuilds the parts
+  [7] Patches pre_parts and writes the new .bin
 """
 
 import math
@@ -46,15 +46,15 @@ def _import(
     section: int = 0,
 ) -> None:
     """
-    Pipeline generico: le template + obj, gera novo .bin, parametrizado por
-    `profile` (face ou trofeu). Use os wrappers import_face/import_trophy.
+    Generic pipeline: reads the template + obj and writes a new .bin, driven
+    by `profile` (face or trophy). Use the import_face/import_trophy wrappers.
 
-    section: so para TROFEU — qual sub-modelo (.mdl) substituir. 0 = o trofeu
-    principal; 1+ = outros objetos 3D (bancada, palco, etc.).
+    section: TROPHY only — which sub-model (.mdl) to replace. 0 = the main
+    trophy; 1+ = other 3D objects (stand, stage, etc.).
 
-    preserve_strips: quando True (default), cada part cuja geometria reproduz
-    EXATAMENTE a do template tem o strip ORIGINAL preservado (roundtrip
-    byte-identico). Parts com geometria nova caem no rebuild normal.
+    preserve_strips: when True (default), each part whose geometry matches
+    the template EXACTLY keeps its ORIGINAL strip (byte-identical roundtrip).
+    Parts with new geometry go through the normal rebuild.
     """
     coord = profile.coord
     # [1] Template ===========================================================
@@ -63,16 +63,16 @@ def _import(
     secs = profile.list_sections(payload) if profile.list_sections else None
     if secs is not None:
         if not (0 <= section < len(secs)):
-            print(f"\nERRO: secao {section} inexistente — o {profile.name} tem "
-                  f"{len(secs)} sub-modelos (.mdl), indices 0..{len(secs)-1}.")
+            print(f"\nERROR: section {section} does not exist — this {profile.name} has "
+                  f"{len(secs)} sub-models (.mdl), indices 0..{len(secs)-1}.")
             sys.exit(1)
-        print(f"      {len(secs)} sub-modelos (.mdl); alvo: secao {section} "
-              f"@0x{secs[section]:X} (0=principal, 1+=outros objetos da cena)")
+        print(f"      {len(secs)} sub-models (.mdl); target: section {section} "
+              f"@0x{secs[section]:X} (0=main, 1+=other objects of the scene)")
     model_offset = profile.locate(payload, section)
     template = parse_model(payload, model_offset)
     n_parts = len(template.parts)
     total_v_template = sum(p.vertex_count for p in template.parts)
-    print(f"      Parts: {n_parts}, vertices total: {total_v_template}")
+    print(f"      Parts: {n_parts}, total vertices: {total_v_template}")
     for i, p in enumerate(template.parts):
         print(f"        Part {i}: vc={p.vertex_count}, tex_id={p.tex_id}")
 
@@ -84,7 +84,7 @@ def _import(
           f"Faces (triangles): {len(obj.faces)}")
 
     if auto_fit:
-        print(f"      Aplicando --auto-fit...")
+        print(f"      Applying --auto-fit...")
         fitted = auto_fit_vertices(obj.vertices, template, coord.int16_to_obj_vertex)
         obj = ObjMesh(
             vertices=fitted,
@@ -95,19 +95,19 @@ def _import(
         )
 
     if len(obj.uvs) != len(obj.vertices):
-        print(f"\nERRO: O .obj tem {len(obj.vertices)} vertices mas "
-              f"{len(obj.uvs)} UVs. Cada vertice precisa ter exatamente 1 UV.")
-        print("As faces nao referenciam UVs (formato f v/vt): reexporte o .obj com UVs.")
+        print(f"\nERROR: the .obj has {len(obj.vertices)} vertices but "
+              f"{len(obj.uvs)} UVs. Each vertex needs exactly 1 UV.")
+        print("The faces do not reference UVs (format f v/vt): export the .obj again with UVs.")
         sys.exit(1)
 
     counts_match = (len(obj.vertices) == total_v_template)
     if not counts_match and not allow_recount:
-        print(f"\nERRO: Mismatch de vertices: obj={len(obj.vertices)}, "
+        print(f"\nERROR: vertex count mismatch: obj={len(obj.vertices)}, "
               f"template={total_v_template}")
-        print("Use --allow-recount para importar .obj com contagem diferente.")
+        print("Use --allow-recount to import an .obj with a different count.")
         sys.exit(1)
 
-    # [3-4] Particionamento ==================================================
+    # [3-4] Partitioning =====================================================
     print(f"\n[3/7] Calculating vertex distribution across parts...")
     try:
         (work_vertices, work_uvs, work_faces,
@@ -117,9 +117,9 @@ def _import(
             use_groups, match_template, auto_fit,
         )
     except ValueError as e:
-        # Erros de configuracao do usuario (grupos != parts, soma de
-        # --part-sizes incorreta, etc.) — mensagem limpa em vez de traceback.
-        print(f"\nERRO: {e}")
+        # User setup errors (groups != parts, wrong --part-sizes sum, etc.)
+        # — a clean message instead of a traceback.
+        print(f"\nERROR: {e}")
         sys.exit(1)
     part_ranges = compute_new_ranges_from_sizes(part_sizes)
     for i, (s, e) in enumerate(part_ranges):
@@ -127,9 +127,9 @@ def _import(
 
     for i, sz in enumerate(part_sizes):
         if sz > MAX_VERTEX_COUNT_PER_PART:
-            print(f"\nERRO: Part {i} tem {sz} vertices "
-                  f"(maximo: {MAX_VERTEX_COUNT_PER_PART}).")
-            print("Reduza o numero de faces ou aumente o numero de parts.")
+            print(f"\nERROR: Part {i} has {sz} vertices "
+                  f"(maximum: {MAX_VERTEX_COUNT_PER_PART}).")
+            print("Reduce the number of faces or increase the number of parts.")
             sys.exit(1)
 
     print(f"\n[4/7] Assigning triangles to parts...")
@@ -137,27 +137,27 @@ def _import(
         tris_per_part = assign_triangles_to_parts(work_faces, part_ranges)
     except ValueError as e:
         if counts_match:
-            # Fallback: vertices na ordem errada (ex: gerado por simplifier)
-            print(f"\nAVISO: Vertices com contagem certa mas ordem nao bate.")
-            print(f"       Usando particionamento BFS automatico...")
+            # Fallback: vertices in the wrong order (e.g. made by a simplifier)
+            print(f"\nWARNING: the vertex count is right but the order does not match.")
+            print(f"       Using automatic BFS partitioning...")
             work_vertices, work_uvs, work_faces, part_sizes = partition_mesh_by_faces(
                 work_vertices, work_uvs, work_faces, n_parts
             )
             for i, sz in enumerate(part_sizes):
                 if sz > MAX_VERTEX_COUNT_PER_PART:
-                    print(f"\nERRO: Part {i} tem {sz} vertices apos BFS "
+                    print(f"\nERROR: Part {i} has {sz} vertices after BFS "
                           f"(max: {MAX_VERTEX_COUNT_PER_PART}).")
                     sys.exit(1)
             part_ranges = compute_new_ranges_from_sizes(part_sizes)
             tris_per_part = assign_triangles_to_parts(work_faces, part_ranges)
         else:
-            print(f"\nERRO: {e}")
+            print(f"\nERROR: {e}")
             sys.exit(1)
 
     for i, tris in enumerate(tris_per_part):
         print(f"      Part {i}: {len(tris)} faces (triangles)")
 
-    # [5] Normais ============================================================
+    # [5] Normals ============================================================
     if recalculate_normals:
         print(f"\n[5/7] Recalculating vertex normals from geometry...")
         float_normals = compute_vertex_normals(work_vertices, work_faces)
@@ -166,17 +166,17 @@ def _import(
         print(f"\n[5/7] Preserving template normals...")
         float_normals = None
 
-    # Normais (float) usadas SO para orientar a malha no modo connected — se o
-    # usuario nao pediu recalculo, calculamos aqui mesmo assim (orientacao
-    # precisa de uma referencia de "frente").
+    # Float normals used ONLY to orient the mesh in connected mode — if the
+    # user did not ask to recalculate them, we compute them here anyway (the
+    # orientation needs a reference for "front").
     orient_normals = None
     if strip_mode == "connected":
         orient_normals = (float_normals if float_normals is not None
                           else compute_vertex_normals(work_vertices, work_faces))
-        print(f"      strip_mode=connected (default): tristrips conectados "
-              f"(orientacao coerente + winding-aware).")
+        print(f"      strip_mode=connected (default): connected tristrips "
+              f"(coherent orientation + winding-aware).")
 
-    # [6] Reconstroi parts ===================================================
+    # [6] Rebuilds the parts =================================================
     print(f"\n[6/7] Converting and rebuilding parts...")
     new_parts = []
     for i, part in enumerate(effective_parts):
@@ -199,7 +199,7 @@ def _import(
                 nx, ny, nz = float_normals[v_global]
                 new_normals_int.append(coord.obj_to_int16_normal(nx, ny, nz))
             else:
-                # Preserva normal do template se houver, senao fallback
+                # Keeps the template normal if there is one, otherwise a fallback
                 if i < len(template.parts) and v_local < len(template.parts[i].normals):
                     new_normals_int.append(template.parts[i].normals[v_local])
                 else:
@@ -208,18 +208,19 @@ def _import(
         if preserve_strips and _part_is_faithful(
                 part, new_vc, new_verts_int, new_uvs_int, new_normals_int,
                 tris_per_part[i]):
-            # Geometria reproduz o template -> reaproveita a part original
-            # (preserva o strip conectado do jogo) => bytes identicos.
+            # The geometry matches the template -> reuse the original part
+            # (keeps the game's connected strip) => identical bytes.
             new_part = part
-            print(f"      Part {i}: {part.vertex_count} v IDENTICA ao template "
-                  f"— strip original preservado (zero-diff)")
+            print(f"      Part {i}: {part.vertex_count} v IDENTICAL to the template "
+                  f"— original strip kept (zero-diff)")
         else:
             part_triangles = tris_per_part[i]
             if strip_mode == "connected":
-                # Orienta os triangulos locais para FRENTE (coerente + normais)
-                # antes de stripificar — pre-condicao do encoder conectado.
+                # Turns the local triangles to face FORWARD (coherent +
+                # normals) before making strips — a precondition of the
+                # connected encoder.
                 from ..model.strip_connected import orient_for_front
-                # orient_normals foi calculado acima sempre que strip_mode==connected.
+                # orient_normals was computed above whenever strip_mode==connected.
                 assert orient_normals is not None
                 local_verts = [work_vertices[v_start + k] for k in range(new_vc)]
                 local_norms = [orient_normals[v_start + k] for k in range(new_vc)]
@@ -231,10 +232,10 @@ def _import(
                     part_triangles, new_count=new_vc, strip_mode=strip_mode,
                 )
             except ValueError as e:
-                # Estouro de strip (>~340 tris/part) ou de vc (>255). Mensagem
-                # limpa apontando a part culpada em vez de traceback.
-                print(f"\nERRO na Part {i}: {e}")
-                print("Reduza a densidade da malha (decimate) ou use mais parts "
+                # Strip overflow (>~340 tris/part) or vc overflow (>255). A
+                # clean message that names the part, instead of a traceback.
+                print(f"\nERROR in Part {i}: {e}")
+                print("Reduce the mesh density (decimate) or use more parts "
                       "(--max-verts-per-part).")
                 sys.exit(1)
             size_diff = new_part.size - part.size
@@ -244,14 +245,14 @@ def _import(
                   f"{len(tris_per_part[i])} tris")
         new_parts.append(new_part)
 
-    # [7] Patches e escrita ==================================================
+    # [7] Patches and writing ================================================
     print(f"\n[7/7] Writing .bin...")
     new_pre_parts = template.pre_parts_bytes
     if len(effective_parts) != len(template.parts):
         new_pre_parts = patch_total_parts(
             template.pre_parts_bytes, template.offset_file_1, len(effective_parts)
         )
-        print(f"      total_parts atualizado: "
+        print(f"      total_parts updated: "
               f"{len(template.parts)} -> {len(effective_parts)}")
 
     new_post_parts = template.post_parts_bytes
@@ -266,8 +267,8 @@ def _import(
     print(f"      Payload: {len(new_payload)} bytes "
           f"(the template had {len(payload)})")
 
-    # Corrige ponteiros absolutos no container se parts_end mudou
-    # (face: parts_end/parts_end-16; trofeu: diretorio de secoes + header externo)
+    # Fixes the absolute pointers in the container if parts_end changed
+    # (face: parts_end/parts_end-16; trophy: section directory + outer header)
     pre_parts_size = len(template.pre_parts_bytes)
     orig_parts_end = pre_parts_size + sum(p.size for p in template.parts)
     new_parts_end = pre_parts_size + sum(p.size for p in new_parts)
@@ -279,9 +280,10 @@ def _import(
             orig_parts_end, new_parts_end,
         )
         print(f"      Container pointers fixed: {patched}")
-        # Fim das parts no model header (+0x2C, relativo ao modelo) — face e
-        # trofeu. Gravado DEPOIS do patch_resize: a varredura dele compara com
-        # os valores do template e poderia re-patchar este se coincidisse.
+        # End of the parts in the model header (+0x2C, relative to the model)
+        # — face and trophy. Written AFTER patch_resize: its scan compares
+        # against the template values and could patch this one again if they
+        # happened to match.
         new_payload = patch_parts_end(new_payload, template.offset_file_1, new_parts_end)
         print(f"      Model header parts_end (rel.): "
               f"0x{new_parts_end - template.offset_file_1:X}")
@@ -294,20 +296,21 @@ def _import(
 
 
 # ============================================================================
-# Helper: deteccao de roundtrip fiel (passthrough do strip)
+# Helper: detects a faithful roundtrip (strip passthrough)
 # ============================================================================
 
 def _part_is_faithful(part, new_vc, new_verts_int, new_uvs_int,
                       new_normals_int, new_triangles) -> bool:
     """
-    True se a geometria nova reproduz EXATAMENTE a part do template: mesmo vc,
-    mesmos vertices/UVs/normais int16, e o mesmo CONJUNTO de triangulos que o
-    strip original decodifica. Nesse caso o strip original pode ser preservado
-    (roundtrip byte-identico).
+    True if the new geometry matches the template part EXACTLY: same vc, same
+    int16 vertices/UVs/normals, and the same SET of triangles that the
+    original strip decodes into. In that case the original strip can be kept
+    (byte-identical roundtrip).
 
-    Compara triangulos como conjunto de frozensets (ignora ordem e winding),
-    pois o decode do strip aplica flip e ordena diferente do .obj — o que
-    importa para preservar e' que sejam os MESMOS triangulos.
+    Triangles are compared as a set of frozensets (order and winding are
+    ignored), because the strip decoder flips and orders them differently from
+    the .obj — what matters for keeping the strip is that they are the SAME
+    triangles.
     """
     if new_vc != part.vertex_count:
         return False
@@ -323,7 +326,7 @@ def _part_is_faithful(part, new_vc, new_verts_int, new_uvs_int,
 
 
 # ============================================================================
-# Helper: seleciona estrategia de particionamento
+# Helper: picks the partition strategy
 # ============================================================================
 
 def _partition(
@@ -332,7 +335,7 @@ def _partition(
     part_sizes_override: Optional[List[int]], max_verts_per_part: Optional[int],
     use_groups: bool, match_template: bool, auto_fit: bool,
 ) -> Tuple[list, list, list, List[int], list, int]:
-    """Encapsula a logica de escolha de particionamento. Retorna:
+    """Holds the logic that picks the partition strategy. Returns:
         (work_vertices, work_uvs, work_faces, part_sizes,
          effective_parts, n_parts).
     """
@@ -340,22 +343,22 @@ def _partition(
     effective_parts = list(template.parts)
 
     if counts_match:
-        # Caso ideal: contagem do .obj bate com template
+        # Ideal case: the .obj count matches the template
         sizes = [p.vertex_count for p in template.parts]
-        print(f"      Contagem bate com template — usando distribuicao original.")
+        print(f"      Count matches the template — using the original distribution.")
         return obj.vertices, obj.uvs, obj.faces, sizes, effective_parts, n_parts
 
     if part_sizes_override is not None:
-        # Usuario forneceu sizes manualmente
+        # The user gave the sizes by hand
         if len(part_sizes_override) != n_parts:
             raise ValueError(
-                f"--part-sizes: forneceu {len(part_sizes_override)} sizes mas "
-                f"template tem {n_parts} parts."
+                f"--part-sizes: {len(part_sizes_override)} sizes given but "
+                f"the template has {n_parts} parts."
             )
         if sum(part_sizes_override) != len(obj.vertices):
             raise ValueError(
-                f"--part-sizes: soma {sum(part_sizes_override)} difere do total "
-                f"de vertices do .obj ({len(obj.vertices)})."
+                f"--part-sizes: the sum {sum(part_sizes_override)} is different "
+                f"from the number of vertices in the .obj ({len(obj.vertices)})."
             )
         return obj.vertices, obj.uvs, obj.faces, part_sizes_override, effective_parts, n_parts
 
@@ -363,9 +366,9 @@ def _partition(
     if use_groups and n_obj_groups > 1:
         if n_obj_groups != n_parts:
             raise ValueError(
-                f"OBJ tem {n_obj_groups} grupos mas template tem {n_parts} parts."
+                f"The OBJ has {n_obj_groups} groups but the template has {n_parts} parts."
             )
-        print(f"      Particionando por {n_obj_groups} grupos OBJ...")
+        print(f"      Partitioning by {n_obj_groups} OBJ groups...")
         work_v, work_u, work_f, sizes = partition_by_obj_groups(
             obj.vertices, obj.uvs, obj.faces, obj.face_groups, n_obj_groups,
         )
@@ -373,9 +376,9 @@ def _partition(
         return work_v, work_u, work_f, sizes, effective_parts, n_parts
 
     if match_template:
-        print(f"      Particionando por nearest-neighbor do template...")
+        print(f"      Partitioning by nearest neighbour of the template...")
         if not auto_fit:
-            print(f"      [AVISO] --match-template funciona melhor com --auto-fit")
+            print(f"      [WARNING] --match-template works better with --auto-fit")
         work_v, work_u, work_f, sizes = partition_by_template(
             obj.vertices, obj.uvs, obj.faces, template,
             profile.coord.int16_to_obj_vertex,
@@ -384,24 +387,24 @@ def _partition(
         return work_v, work_u, work_f, sizes, effective_parts, n_parts
 
     if use_groups and n_obj_groups <= 1:
-        print(f"      [AVISO] --use-groups pedido mas o .obj nao tem grupos 'g'/'o'. "
-              f"Caindo para BFS automatico. No Blender: separe o rosto em "
-              f"{n_parts} objetos e exporte como .obj multi-object.")
+        print(f"      [WARNING] --use-groups was asked but the .obj has no 'g'/'o' groups. "
+              f"Falling back to automatic BFS. In Blender: split the face into "
+              f"{n_parts} objects and export a multi-object .obj.")
 
-    # Default: BFS por adjacencia
-    # Pode expandir parts alem do template se max_verts_per_part for dado
+    # Default: BFS by adjacency
+    # May add parts beyond the template when max_verts_per_part is given
     if max_verts_per_part is not None:
         n_needed = max(n_parts, math.ceil(len(obj.vertices) / max_verts_per_part))
         if profile.max_parts is not None and n_needed > profile.max_parts:
             min_vc = math.ceil(len(obj.vertices) / profile.max_parts)
-            print(f"\nERRO: --max-verts-per-part {max_verts_per_part} requer "
-                  f"{n_needed} parts, mas {profile.name} suporta no maximo "
-                  f"{profile.max_parts} (byte[0x04]=8 em todos os exemplos de face).")
-            print(f"      Com > {profile.max_parts} parts a face fica INVISIVEL.")
-            print(f"      Solucoes:")
-            print(f"        1. Aumente --max-verts-per-part para >= {min_vc}")
-            print(f"        2. Remova --max-verts-per-part (distribui automatico)")
-            print(f"        3. Reduza o numero de vertices do .obj "
+            print(f"\nERROR: --max-verts-per-part {max_verts_per_part} needs "
+                  f"{n_needed} parts, but {profile.name} supports at most "
+                  f"{profile.max_parts} (byte[0x04]=8 in all face examples).")
+            print(f"      With > {profile.max_parts} parts the face becomes INVISIBLE.")
+            print(f"      Solutions:")
+            print(f"        1. Raise --max-verts-per-part to >= {min_vc}")
+            print(f"        2. Remove --max-verts-per-part (automatic distribution)")
+            print(f"        3. Reduce the number of vertices in the .obj "
                   f"(max ~{MAX_VERTEX_COUNT_PER_PART * profile.max_parts})")
             sys.exit(1)
         if n_needed > n_parts:
@@ -410,7 +413,7 @@ def _partition(
                 clone_part_structure(donor) for _ in range(n_needed - n_parts)
             ]
             n_parts = n_needed
-            print(f"      Parts expandidas: {len(template.parts)} -> {n_parts}")
+            print(f"      Parts added: {len(template.parts)} -> {n_parts}")
 
     print(f"      Partitioning mesh by faces (BFS) into {n_parts} groups...")
     work_v, work_u, work_f, sizes = partition_mesh_by_faces(
@@ -423,4 +426,4 @@ def _partition(
 def _log_seam_stats(orig, new):
     dup = len(new) - len(orig)
     print(f"      Vertices: {len(orig)} -> {len(new)} "
-          f"({dup:+d} Duplicate at seams)")
+          f"({dup:+d} duplicated at seams)")

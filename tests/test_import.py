@@ -1,4 +1,4 @@
-"""Import .obj -> .bin: roundtrip, estratégias de partição e erros."""
+"""Import .obj -> .bin: roundtrip, partition strategies and errors."""
 
 import pathlib
 import struct
@@ -12,33 +12,33 @@ from wepes3d import (
 
 
 def _vcount(bin_path):
-    """Total de vértices do modelo (auto-localiza face ou troféu)."""
+    """Total vertices of the model (finds face or trophy automatically)."""
     payload, _, _ = decompress_bin(bin_path)
     m = parse_model(payload)
     return sum(p.vertex_count for p in m.parts)
 
 
 # ---------------------------------------------------------------------------
-# Roundtrip e edição leve (contagem bate com o template)
+# Roundtrip and light edits (the count matches the template)
 # ---------------------------------------------------------------------------
 
 def test_import_roundtrip_face(face_bin, face_obj, tmp_path):
     out = tmp_path / "rt.bin"
     import_face(face_bin, face_obj, str(out))
     assert out.exists()
-    # a geometria é preservada (696 vértices, 8 parts)
+    # the geometry is kept (696 vertices, 8 parts)
     assert _vcount(str(out)) == 696
-    # sem edição, as 8 parts passam direto (passthrough): payload byte-idêntico
+    # without edits, all 8 parts pass through (passthrough): byte-identical payload
     assert decompress_bin(str(out))[0] == decompress_bin(face_bin)[0]
 
 
 def test_import_edited_vertex_recodes_one_part(face_bin, face_obj, tmp_path):
-    # edita 1 vértice: a part dele deixa de ser "fiel" ao template (mesma
-    # contagem, vértice diferente) e é recodificada; as outras seguem idênticas.
+    # edits 1 vertex: its part is no longer "faithful" to the template (same
+    # count, different vertex) and is re-encoded; the others stay identical.
     lines = pathlib.Path(face_obj).read_text().splitlines()
     for i, ln in enumerate(lines):
         if ln.startswith("v "):
-            lines[i] = "v 0.100000 -0.455029 1.723830"   # mexe no 1º vértice
+            lines[i] = "v 0.100000 -0.455029 1.723830"   # moves the 1st vertex
             break
     edited = tmp_path / "edited.obj"
     edited.write_text("\n".join(lines) + "\n")
@@ -49,8 +49,8 @@ def test_import_edited_vertex_recodes_one_part(face_bin, face_obj, tmp_path):
 
 def test_import_strip_mode_list(face_bin, face_obj, tmp_path):
     out = tmp_path / "list.bin"
-    # preserve_strips=False: sem edição, o passthrough manteria os strips do
-    # jogo e nenhuma part seria codificada em modo list.
+    # preserve_strips=False: without edits, the passthrough would keep the
+    # game strips and no part would be encoded in list mode.
     import_face(face_bin, face_obj, str(out), strip_mode="list", preserve_strips=False)
     assert _vcount(str(out)) == 696
 
@@ -62,7 +62,7 @@ def test_import_no_preserve_strips(face_bin, face_obj, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Recount: estratégias de partição
+# Recount: partition strategies
 # ---------------------------------------------------------------------------
 
 def test_import_recount_bfs(face_bin, grid_obj, tmp_path):
@@ -76,7 +76,7 @@ def test_import_use_groups(face_bin, islands_obj, tmp_path):
     out = tmp_path / "groups.bin"
     import_face(face_bin, islands_obj(8, with_groups=True), str(out),
                 allow_recount=True, use_groups=True, recalculate_normals=True)
-    assert _vcount(str(out)) == 32                     # 8 ilhas × 4 vértices
+    assert _vcount(str(out)) == 32                     # 8 islands × 4 vertices
 
 
 def test_import_part_sizes(face_bin, islands_obj, tmp_path):
@@ -95,7 +95,7 @@ def test_import_match_template(face_bin, islands_obj, tmp_path):
 
 
 def test_import_use_groups_without_groups_warns(face_bin, grid_obj, tmp_path):
-    # --use-groups pedido mas o .obj não tem grupos -> cai no BFS (com aviso)
+    # --use-groups was asked but the .obj has no groups -> falls back to BFS (with a warning)
     out = tmp_path / "nogroups.bin"
     import_face(face_bin, grid_obj(8), str(out),
                 allow_recount=True, use_groups=True, recalculate_normals=True)
@@ -103,15 +103,15 @@ def test_import_use_groups_without_groups_warns(face_bin, grid_obj, tmp_path):
 
 
 def test_import_counts_match_but_order_crosses_fallback(face_bin, ribbon_obj, tmp_path):
-    # 696 vértices (= template) MAS os triângulos cruzam as fronteiras de 87 ->
-    # assign_triangles falha e o pipeline cai no BFS automático (fallback).
+    # 696 vertices (= template) BUT the triangles cross the 87-vertex borders ->
+    # assign_triangles fails and the pipeline falls back to automatic BFS.
     out = tmp_path / "fallback.bin"
     import_face(face_bin, ribbon_obj(696), str(out), recalculate_normals=True)
     assert out.exists()
 
 
 def test_import_match_template_without_autofit(face_bin, islands_obj, tmp_path):
-    # match-template SEM auto-fit: deve avisar e ainda assim rodar
+    # match-template WITHOUT auto-fit: must warn and still run
     out = tmp_path / "match2.bin"
     import_face(face_bin, islands_obj(8), str(out),
                 allow_recount=True, match_template=True, recalculate_normals=True)
@@ -119,7 +119,7 @@ def test_import_match_template_without_autofit(face_bin, islands_obj, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Troféu
+# Trophy
 # ---------------------------------------------------------------------------
 
 def test_import_trophy_roundtrip(trophy_bin, tmp_path):
@@ -127,12 +127,12 @@ def test_import_trophy_roundtrip(trophy_bin, tmp_path):
     export_trophy(trophy_bin, str(obj), section=0)
     out = tmp_path / "t_rt.bin"
     import_trophy(trophy_bin, str(obj), str(out), section=0)
-    # sem edição, as 14 parts passam direto: payload byte-idêntico
+    # without edits, all 14 parts pass through: byte-identical payload
     assert decompress_bin(str(out))[0] == decompress_bin(trophy_bin)[0]
 
 
 # ---------------------------------------------------------------------------
-# Fim das parts no model header (model+0x2C, relativo ao modelo)
+# End of the parts in the model header (model+0x2C, relative to the model)
 # ---------------------------------------------------------------------------
 
 def _parts_end_rel_ok(payload, model_offset):
@@ -148,18 +148,18 @@ def test_import_trophy_recount_updates_parts_end(trophy_bin, grid_obj, tmp_path)
     template, _, _ = decompress_bin(trophy_bin)
     payload, _, _ = decompress_bin(str(out))
     secs = trophy_section_offsets(payload)
-    assert secs[1] != trophy_section_offsets(template)[1]     # sec0 mudou de tamanho
+    assert secs[1] != trophy_section_offsets(template)[1]     # sec0 changed size
     assert all(_parts_end_rel_ok(payload, off) for off in secs)
 
 
 def test_import_face_model_at_0x20_updates_parts_end(face_bin, grid_obj, tmp_path):
-    # face.bin com o modelo movido de 0x10 para 0x20 (layout de h2/face_1): o
-    # fim das parts em model+0x2C deixa de coincidir com `parts_end - 16`.
+    # face.bin with the model moved from 0x10 to 0x20 (the h2/face_1 layout):
+    # the end of the parts at model+0x2C is no longer equal to `parts_end - 16`.
     payload, outer, trailing = decompress_bin(face_bin)
     moved = bytearray(payload[:0x10] + bytes(16) + payload[0x10:])
     struct.pack_into("<I", moved, 0x08, 0x20)                      # offset_file_1
     parts_end = struct.unpack_from("<I", moved, 0x0C)[0]
-    struct.pack_into("<I", moved, 0x0C, parts_end + 16)            # parts_end absoluto
+    struct.pack_into("<I", moved, 0x0C, parts_end + 16)            # absolute parts_end
     assert _parts_end_rel_ok(bytes(moved), 0x20)
     template = tmp_path / "face_0x20.bin"
     compress_bin(bytes(moved), outer, trailing, str(template))
@@ -171,7 +171,7 @@ def test_import_face_model_at_0x20_updates_parts_end(face_bin, grid_obj, tmp_pat
 
 
 # ---------------------------------------------------------------------------
-# Caminhos de erro (saída limpa via sys.exit -> SystemExit)
+# Error paths (clean exit via sys.exit -> SystemExit)
 # ---------------------------------------------------------------------------
 
 def test_error_recount_without_flag(face_bin, grid_obj, tmp_path):
@@ -195,7 +195,7 @@ def test_error_use_groups_wrong_count(face_bin, islands_obj, tmp_path):
 def test_error_part_sizes_wrong_sum(face_bin, islands_obj, tmp_path):
     with pytest.raises(SystemExit):
         import_face(face_bin, islands_obj(8), str(tmp_path / "x.bin"),
-                    allow_recount=True, part_sizes_override=[1] * 8)  # soma 8 != 32
+                    allow_recount=True, part_sizes_override=[1] * 8)  # sum 8 != 32
 
 
 def test_error_part_sizes_wrong_count(face_bin, islands_obj, tmp_path):
@@ -211,8 +211,8 @@ def test_error_max_verts_needs_too_many_parts(face_bin, grid_obj, tmp_path):
 
 
 def test_error_part_exceeds_255(face_bin, grid_obj, tmp_path):
-    # grid 18×18 = 324 vértices; força a part 0 com 300 (> 255)
+    # grid 18×18 = 324 vertices; forces part 0 to 300 (> 255)
     with pytest.raises(SystemExit):
         import_face(face_bin, grid_obj(18), str(tmp_path / "x.bin"),
                     allow_recount=True,
-                    part_sizes_override=[300, 6, 6, 6, 2, 2, 1, 1])  # soma = 324
+                    part_sizes_override=[300, 6, 6, 6, 2, 2, 1, 1])  # sum = 324

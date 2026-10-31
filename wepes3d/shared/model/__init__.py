@@ -1,13 +1,13 @@
 """
-shared.model — o modelo 3D interno do PES PS2 (MAGIC_MODEL 03 00 FF FF).
+shared.model — the internal PES PS2 3D model (MAGIC_MODEL 03 00 FF FF).
 
-  * parser          — parse/escreve o modelo: Part/Model, parse_model, write_*,
+  * parser          — reads/writes the model: Part/Model, parse_model, write_*,
                       detect_asset_type, locate_model.
-  * reader          — leitor UNIVERSAL de geometria de uma part/modelo (verts/
-                      UVs/faces), ciente do formato (porta do stadium_modifier).
-  * strip           — codifica/decodifica o strip data (triangle list/strip).
-  * strip_connected — tristrips conectados (orientacao coerente) — modo padrao.
-  * rebuilder       — reconstroi uma part com geometria nova (+ patch de ponteiros).
+  * reader          — UNIVERSAL geometry reader of a part/model (verts/UVs/
+                      faces), format-aware (port of stadium_modifier).
+  * strip           — encodes/decodes the strip data (triangle list/strip).
+  * strip_connected — connected tristrips (coherent orientation) — default mode.
+  * rebuilder       — rebuilds a part with new geometry (+ pointer patches).
 """
 
 from .parser import (

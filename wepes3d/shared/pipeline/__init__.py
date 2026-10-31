@@ -1,11 +1,11 @@
 """
-shared.pipeline — orquestracao import/export.
+shared.pipeline — import/export orchestration.
 
-  * assets    — AssetProfile (a interface entre o motor e cada tipo de asset).
-  * importer  — _import: motor .obj -> .bin (face/trofeu), parametrizado por profile.
-  * exporter  — _export: motor .bin -> .obj (face/trofeu).
-  * folder    — export de "pasta de modelos" (estadio/kit): modelo/completo/partes/cena.
-  * partition — estrategias de particionamento do mesh em parts (usado pelo importer).
+  * assets    — AssetProfile (the interface between the engine and each asset type).
+  * importer  — _import: .obj -> .bin engine (face/trophy), driven by a profile.
+  * exporter  — _export: .bin -> .obj engine (face/trophy).
+  * folder    — export of a "model folder" (stadium/kit): model/complete/parts/scene.
+  * partition — strategies to split the mesh into parts (used by the importer).
 """
 
 from .assets import AssetProfile

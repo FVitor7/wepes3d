@@ -1,8 +1,8 @@
 """
-Motor de EXPORT .bin -> .obj para FACE e TROFEU (parametrizado por AssetProfile).
+EXPORT engine .bin -> .obj for FACES and TROPHIES (driven by an AssetProfile).
 
-Estadio e kit usam `folder.py` (pasta de modelos). A leitura de geometria de
-cada part vem do leitor universal `model.reader`.
+Stadiums and kits use `folder.py` (model folder). The geometry of each part
+is read by the universal reader `model.reader`.
 """
 
 from .assets import AssetProfile
@@ -14,11 +14,11 @@ from ..model.reader import read_model_geometry
 def _export(profile: AssetProfile, bin_path: str, obj_path: str,
             section: int = 0, write_mtl: bool = True) -> None:
     """
-    Exporta um sub-modelo (.mdl) de um .bin para .obj (+ .mtl opcional).
+    Exports one sub-model (.mdl) of a .bin to .obj (+ optional .mtl).
 
-    Cada part e' lida pelo leitor UNIVERSAL `model.reader.read_part_geometry`
-    (detecta o formato pelos proprios bytes). Converte vertices/UVs para o espaco
-    OBJ via `profile.coord`.
+    Each part is read by the UNIVERSAL reader
+    `model.reader.read_part_geometry` (it finds the format from the bytes
+    themselves). Vertices/UVs are converted to OBJ space with `profile.coord`.
     """
     coord = profile.coord
     payload, _, _ = decompress_bin(bin_path)
@@ -28,9 +28,9 @@ def _export(profile: AssetProfile, bin_path: str, obj_path: str,
         coord, payload, model_offset)
 
     write_obj(obj_path, verts, uvs, faces, write_mtl=write_mtl,
-              comment=f"{profile.name} section {section} de {bin_path}")
+              comment=f"{profile.name} section {section} of {bin_path}")
     print(f"[export] {profile.name} sec{section}: {len(verts)} v, "
           f"{len(faces)} faces -> {obj_path}")
     if skipped:
-        print(f"  [AVISO] {skipped}/{nparts} part(s) puladas: estrutura "
-              f"de geometria nao reconhecida pelo leitor universal.")
+        print(f"  [WARNING] {skipped}/{nparts} part(s) skipped: geometry "
+              f"structure not recognized by the universal reader.")

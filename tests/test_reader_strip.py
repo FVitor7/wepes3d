@@ -1,4 +1,4 @@
-"""Leitor universal de geometria + codificação/decodificação do strip."""
+"""Universal geometry reader + strip encoding/decoding."""
 
 import pytest
 
@@ -27,7 +27,7 @@ def test_read_part_geometry_face(face_bin):
     assert len(verts) == 87
     assert len(uvs) == 87
     assert len(faces) > 0
-    # índices das faces ficam dentro do range de vértices da part
+    # the face indices stay inside the vertex range of the part
     for tri in faces:
         assert all(0 <= i < 87 for i in tri)
 
@@ -62,54 +62,54 @@ def test_triangle_list_roundtrip():
 
 
 def test_decode_strip_case2_neg_pos_pos():
-    # [neg(0), kick(1), kick(2)] -> case 2 -> triângulo (0,1,2)
+    # [neg(0), kick(1), kick(2)] -> case 2 -> triangle (0,1,2)
     indices = [-32764, 8, 12]
     assert decode_strip(indices, vc=10) == [(0, 1, 2)]
 
 
 def test_decode_strip_case3_pos_pos_pos():
-    # [kick(0), kick(1), kick(2)] -> case 3 -> triângulo (0,1,2)
+    # [kick(0), kick(1), kick(2)] -> case 3 -> triangle (0,1,2)
     indices = [4, 8, 12]
     assert decode_strip(indices, vc=10) == [(0, 1, 2)]
 
 
 def test_decode_strip_skips_degenerate_triangle():
-    # [kick(0), kick(0), kick(1)] -> a==b -> triângulo degenerado é descartado
+    # [kick(0), kick(0), kick(1)] -> a==b -> the degenerate triangle is dropped
     assert decode_strip([4, 4, 8], vc=10) == []
 
 
 def test_decode_strip_skips_out_of_range():
-    # índice aponta para vértice >= vc -> inválido -> descartado
+    # the index points to a vertex >= vc -> invalid -> dropped
     assert decode_strip([4, 8, 4000], vc=3) == []
 
 
 def test_decode_strip_case1_degenerate():
-    # [neg(0), neg(0), kick(1)] -> caso 1 com a==b -> descartado
+    # [neg(0), neg(0), kick(1)] -> case 1 with a==b -> dropped
     assert decode_strip([-32764, -32764, 8], vc=10) == []
 
 
 def test_decode_strip_case2_degenerate():
-    # [neg(0), kick(2), kick(2)] -> caso 2 com b==c -> descartado
+    # [neg(0), kick(2), kick(2)] -> case 2 with b==c -> dropped
     assert decode_strip([-32764, 12, 12], vc=10) == []
 
 
 def test_decode_strip_degenerate_mixed_signs():
-    # [neg(0), kick(0), kick(1)] -> a != b só pelo sinal, mas decodifica em
-    # (0, 0, 1): degenerado -> descartado, como no leitor do export. Antes,
-    # esse triângulo fantasma fazia o passthrough recodificar parts intactas.
+    # [neg(0), kick(0), kick(1)] -> a != b only by the sign, but it decodes into
+    # (0, 0, 1): degenerate -> dropped, like in the export reader. Before, this
+    # ghost triangle made the passthrough re-encode untouched parts.
     assert decode_strip([-32764, 4, 8], vc=10) == []
 
 
 def test_align_strip_to_v4():
-    assert len(align_strip_to_v4([1, 2, 3])) == 4          # padding até múltiplo de 4
-    assert align_strip_to_v4([1, 2, 3, 4]) == [1, 2, 3, 4]  # já alinhado
+    assert len(align_strip_to_v4([1, 2, 3])) == 4          # padding up to a multiple of 4
+    assert align_strip_to_v4([1, 2, 3, 4]) == [1, 2, 3, 4]  # already aligned
     assert align_strip_to_v4([1, 2, 3])[-1] == STRIP_PADDING_VALUE
 
 
 def test_pad_to_length():
     assert pad_to_length([1, 2], 5) == [1, 2, STRIP_PADDING_VALUE, STRIP_PADDING_VALUE,
                                         STRIP_PADDING_VALUE]
-    assert pad_to_length([1, 2, 3], 2) == [1, 2, 3]        # já maior: não corta
+    assert pad_to_length([1, 2, 3], 2) == [1, 2, 3]        # already longer: not cut
 
 
 def test_pack_strip_indices_length():
@@ -122,14 +122,14 @@ def test_encode_vertex_kick_overflow():
 
 
 # ---------------------------------------------------------------------------
-# strip conectado
+# connected strip
 # ---------------------------------------------------------------------------
 
 def test_connected_strip_preserves_triangle_set():
     tris = [(0, 1, 2), (1, 2, 3), (2, 3, 4), (3, 4, 5)]
     indices = connected_strips_to_indices(build_connected_strips(tris))
     decoded = decode_strip(indices, vc=6)
-    # o strip conectado deve recuperar exatamente o mesmo CONJUNTO de triângulos
+    # the connected strip must give back exactly the same SET of triangles
     assert {frozenset(t) for t in decoded} == {frozenset(t) for t in tris}
 
 

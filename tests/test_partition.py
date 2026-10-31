@@ -1,4 +1,4 @@
-"""Particionamento: atribuição de triângulos e estratégias (unitário)."""
+"""Partitioning: triangle assignment and strategies (unit tests)."""
 
 import pytest
 
@@ -16,12 +16,12 @@ def test_assign_triangles_ok():
     ranges = [(0, 3), (3, 6)]
     out = assign_triangles_to_parts([(0, 1, 2), (3, 4, 5)], ranges)
     assert out[0] == [(0, 1, 2)]
-    assert out[1] == [(0, 1, 2)]            # índices LOCAIS (relativos à part)
+    assert out[1] == [(0, 1, 2)]            # LOCAL indices (relative to the part)
 
 
 def test_assign_triangles_vertex_out_of_range():
     with pytest.raises(ValueError):
-        assign_triangles_to_parts([(0, 1, 9)], [(0, 3), (3, 6)])   # v9 fora de tudo
+        assign_triangles_to_parts([(0, 1, 9)], [(0, 3), (3, 6)])   # v9 is outside every range
 
 
 def test_assign_triangles_crosses_boundary():
@@ -33,7 +33,7 @@ def test_bfs_more_parts_than_faces():
     verts = [(0, 0, 0), (1, 0, 0), (0, 1, 0)]
     uvs = [(0, 0), (1, 0), (0, 1)]
     faces = [(0, 1, 2)]
-    # 1 face mas 4 parts pedidas -> sobram parts vazias (cobre o break do BFS)
+    # 1 face but 4 parts asked -> some parts stay empty (covers the BFS break)
     nv, nu, nf, sizes = partition_mesh_by_faces(verts, uvs, faces, 4)
     assert sum(sizes) >= 3
 
@@ -42,6 +42,6 @@ def test_partition_by_obj_groups_ignores_out_of_range_gidx():
     verts = [(0, 0, 0), (1, 0, 0), (0, 1, 0)]
     uvs = [(0, 0), (1, 0), (0, 1)]
     faces = [(0, 1, 2)]
-    # face_groups com índice >= n_groups deve ser ignorada
+    # a face_groups entry with index >= n_groups must be ignored
     nv, nu, nf, sizes = partition_by_obj_groups(verts, uvs, faces, [5], n_groups=2)
     assert len(sizes) == 2

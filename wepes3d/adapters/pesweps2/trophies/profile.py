@@ -1,14 +1,14 @@
 """
-Adapter de TROFEU: o que difere das faces.
+TROPHY adapter: what is different from faces.
 
-- Coordenadas: stored (sx, sz, -sy), factor = +0.001553 (nega Y).
-- Container ANINHADO: payload[8] = container 00 06 00 00 -> base = +32 ->
-  diretorio de secoes (sub-modelos .mdl). sec0 = trofeu; sec1+ = bancada/palco.
-- Resize: desliza as entradas do diretorio (apos a target) + ponteiros ABS do
-  header externo (ex.: container de texturas em payload[0x0C]).
-- max_parts: None (trofeus tem 14-31 parts por sub-modelo; sem limite de 8).
+- Coordinates: stored (sx, sz, -sy), factor = +0.001553 (Y is negated).
+- NESTED container: payload[8] = container 00 06 00 00 -> base = +32 ->
+  section directory (.mdl sub-models). sec0 = trophy; sec1+ = stand/stage.
+- Resize: moves the directory entries (after the target) + the ABS pointers
+  of the outer header (e.g. the texture container at payload[0x0C]).
+- max_parts: None (trophies have 14-31 parts per sub-model; no limit of 8).
 
-Ver docs/08-trofeus.md.
+See docs/08-trophies.md.
 """
 
 import struct
@@ -19,16 +19,16 @@ from ....shared.geometry import CoordSpace, obj_to_int16_uv, int16_to_obj_uv, cl
 from ....shared.pipeline import AssetProfile
 
 TROPHY_VERTEX_FACTOR = 0.001553
-"""Fator de vertice do trofeu (positivo). Mesma magnitude do |VERTEX_FACTOR| da
-face, mas SEM o sinal negativo — a inversao de eixo vem da negacao de Y."""
+"""Trophy vertex factor (positive). Same size as the face |VERTEX_FACTOR|, but
+WITHOUT the negative sign — the axis flip comes from negating Y."""
 
 
 # ============================================================================
-# Coordenadas do trofeu
+# Trophy coordinates
 # ============================================================================
 
 def obj_to_int16_vertex(x: float, y: float, z: float) -> Tuple[int, int, int]:
-    """OBJ (x,y,z) -> stored (sx, sz, -sy). Inverte Y."""
+    """OBJ (x,y,z) -> stored (sx, sz, -sy). Flips Y."""
     f = TROPHY_VERTEX_FACTOR
     return (clamp16(round(x / f)), clamp16(round(z / f)), clamp16(round(-y / f)))
 
@@ -40,8 +40,8 @@ def int16_to_obj_vertex(s0: int, s1: int, s2: int) -> Tuple[float, float, float]
 
 
 def obj_to_int16_normal(nx: float, ny: float, nz: float) -> Tuple[int, int, int]:
-    """Normal unitaria -> int16, mesma permutacao de eixos dos vertices do trofeu
-    (nx, nz, -ny). Validar in-game ao usar recount com normais."""
+    """Unit normal -> int16, with the same axis order as the trophy vertices
+    (nx, nz, -ny). Check it in the game when you use recount with normals."""
     return (clamp16(round(nx * NORMAL_SCALE)),
             clamp16(round(nz * NORMAL_SCALE)),
             clamp16(round(-ny * NORMAL_SCALE)))
@@ -58,15 +58,15 @@ COORD = CoordSpace(
 
 
 # ============================================================================
-# Container aninhado: diretorio de secoes (.mdl)
+# Nested container: section directory (.mdl)
 # ============================================================================
 
 def section_offsets(payload: bytes) -> List[int]:
-    """Offsets ABSOLUTOS de cada sub-modelo (.mdl) do diretorio de secoes.
-    sec0 = trofeu principal; sec1+ = bancada/palco/etc."""
+    """ABSOLUTE offsets of each sub-model (.mdl) in the section directory.
+    sec0 = main trophy; sec1+ = stand/stage/etc."""
     offset_file_1 = struct.unpack_from("<I", payload, 8)[0]
     if payload[offset_file_1:offset_file_1 + 4] != CONTAINER_MAGIC:
-        raise ValueError("Asset nao eh um trofeu (sem container 00060000).")
+        raise ValueError("The asset is not a trophy (no 00060000 container).")
     base = offset_file_1 + 32
     count = struct.unpack_from("<I", payload, base)[0]
     offsets: List[int] = []
@@ -79,25 +79,28 @@ def section_offsets(payload: bytes) -> List[int]:
 
 
 def locate(payload: bytes, section: int = 0) -> int:
-    """Offset do sub-modelo `section` (0 = trofeu principal)."""
+    """Offset of the sub-model `section` (0 = main trophy)."""
     secs = section_offsets(payload)
     if not (0 <= section < len(secs)):
-        raise ValueError(f"secao {section} inexistente ({len(secs)} sub-modelos).")
+        raise ValueError(f"section {section} does not exist ({len(secs)} sub-models).")
     return secs[section]
 
 
 # ============================================================================
-# Resize: diretorio de secoes (+delta) + header externo (ponteiros ABS)
+# Resize: section directory (+delta) + outer header (ABS pointers)
 # ============================================================================
 
 def patch_resize(payload: bytes, model_offset: int, pre_parts_size: int,
                  orig_parts_end: int, new_parts_end: int) -> Tuple[bytes, int]:
     """
-    Ao mudar o tamanho da target por delta, desliza +delta:
-      - entradas do diretorio (rel a base) cujo alvo abs >= orig_parts_end;
-      - uint32 do header externo (0x00..base, ABS) >= orig_parts_end (ex.: o
-        container de texturas em payload[0x0C]).
-    `pre_parts_size` nao eh usado (mantido por compatibilidade de assinatura).
+    When the target changes size by delta, moves these by +delta:
+      - the directory entries (relative to base) whose absolute target is
+        >= orig_parts_end;
+      - the uint32 values of the outer header (0x00..base, ABS) that are
+        >= orig_parts_end (e.g. the texture container at payload[0x0C]).
+    `pre_parts_size` is not used (kept so the signature matches).
+    The end of the parts in the model header (+0x2C) is written by the
+    importer.
     """
     delta = new_parts_end - orig_parts_end
     if delta == 0:
@@ -113,7 +116,7 @@ def patch_resize(payload: bytes, model_offset: int, pre_parts_size: int,
         if off + 4 > len(arr):
             break
         rel = struct.unpack_from("<I", arr, off)[0]
-        if base + rel >= orig_parts_end:      # secao apos a target -> desliza
+        if base + rel >= orig_parts_end:      # section after the target -> move it
             struct.pack_into("<I", arr, off, rel + delta)
             patched += 1
 

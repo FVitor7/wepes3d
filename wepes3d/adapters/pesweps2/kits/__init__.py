@@ -1,26 +1,27 @@
 """
-Adapter de KIT (uniforme: camisa/corpo, mãos) — export .bin -> .obj.
+KIT adapter (uniform: shirt/body, hands) — export .bin -> .obj.
 
-Engenharia reversa (validada renderizando): os arquivos de kit são blocos
-comprimidos `00 06 01 00` que descompactam para uma "pasta de modelos"
-(`03 00 FF FF`) — MESMA navegação de estádio. O modelo 3D interno é o de sempre
-(leitor universal). A COORDENADA é a MESMA da FACE (kit é equipamento do jogador,
-no mesmo espaço do corpo): factor -0.001553, eixos da face.
+Reverse engineering (checked by rendering): kit files are `00 06 01 00`
+compressed blocks that decompress into a "model folder" (`03 00 FF FF`) — the
+SAME navigation as stadiums. The internal 3D model is the usual one (universal
+reader). The COORDINATES are the SAME as the FACE (a kit is player equipment,
+in the same space as the body): factor -0.001553, face axes.
 
-Mapa dos arquivos de exemplo em `kit/`:
-  * `unnamed_1135` — camisa/corpo (5 modelos: LODs/peças)
-  * `unnamed_5170` — mãos (4 modelos)
-  * `unnamed_5302/5306/6039/6040/6041` — textura/dados (0 modelos 3D)
+Map of the sample files we analysed (in a local `kit/` folder; they are not
+in this repository):
+  * `unnamed_1135` — shirt/body (5 models: LODs/pieces)
+  * `unnamed_5170` — hands (4 models)
+  * `unnamed_5302/5306/6039/6040/6041` — texture/data (0 3D models)
 
-Por isso toda a lógica é reaproveitada de `shared/folder_models.py`; aqui só
-amarramos o `CoordSpace` da face.
+So all the logic comes from `shared/pipeline/folder.py`; here we only plug in
+the face `CoordSpace`.
 
 API:
-    list_kit("kit/unnamed_1135")                 # imprime estrutura
-    export_kit("kit/unnamed_1135", "camisa.obj") # 1 modelo (global 0)
-    export_kit_complete("kit/unnamed_1135", "kit.obj")    # tudo num .obj
-    export_kit_parts("kit/unnamed_1135", "out/kit")       # 1 .obj por modelo
-    export_kit_scene([a, b], "cena.obj")         # varios arquivos num .obj
+    list_kit("kit/unnamed_1135")                 # prints the structure
+    export_kit("kit/unnamed_1135", "shirt.obj")  # 1 model (global 0)
+    export_kit_complete("kit/unnamed_1135", "kit.obj")    # everything in one .obj
+    export_kit_parts("kit/unnamed_1135", "out/kit")       # 1 .obj per model
+    export_kit_scene([a, b], "scene.obj")        # several files in one .obj
 """
 
 from typing import List, Tuple

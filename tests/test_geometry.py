@@ -1,4 +1,4 @@
-"""Geometria asset-agnóstica: bbox, auto-fit e normais."""
+"""Asset-agnostic geometry: bbox, auto-fit and normals."""
 
 import math
 
@@ -23,18 +23,18 @@ def test_template_bbox_and_autofit(face_bin):
     tmin, tmax = compute_template_obj_bbox(template, FACE.int16_to_obj_vertex)
     assert tmin[0] < tmax[0]
 
-    # um .obj minúsculo e deslocado deve ser encaixado dentro do bbox do template
+    # a tiny, shifted .obj must be fitted inside the template bbox
     verts = [(100, 100, 100), (101, 100, 100), (100, 101, 100), (100, 100, 101)]
     fitted = auto_fit_vertices(verts, template, FACE.int16_to_obj_vertex)
     fmin, fmax = compute_obj_bbox(fitted)
-    # tolerância pequena: o centro foi alinhado e a escala é uniforme (min)
+    # small tolerance: the center was aligned and the scale is uniform (min)
     assert fmin[0] >= tmin[0] - 1e-6 and fmax[0] <= tmax[0] + 1e-6
 
 
 def test_autofit_degenerate_axis(face_bin):
     payload, _, _ = decompress_bin(face_bin)
     template = parse_model(payload)
-    # todos os vértices no MESMO ponto -> span 0 em todos os eixos (scale=1.0)
+    # all vertices at the SAME point -> span 0 on every axis (scale=1.0)
     verts = [(5, 5, 5)] * 4
     fitted = auto_fit_vertices(verts, template, FACE.int16_to_obj_vertex)
     assert len(fitted) == 4
@@ -46,12 +46,12 @@ def test_vertex_normals_unit_length():
     normals = compute_vertex_normals(verts, faces)
     for nx, ny, nz in normals:
         assert math.isclose(math.sqrt(nx*nx + ny*ny + nz*nz), 1.0, abs_tol=1e-6)
-    # triângulo no plano Z -> normal aponta em +Z (ou -Z)
+    # triangle on the Z plane -> the normal points to +Z (or -Z)
     assert abs(normals[0][2]) == 1.0
 
 
 def test_vertex_normals_isolated_fallback():
-    # vértice 3 não participa de nenhuma face -> fallback (0,1,0)
+    # vertex 3 is not used by any face -> fallback (0,1,0)
     verts = [(0, 0, 0), (1, 0, 0), (0, 1, 0), (9, 9, 9)]
     faces = [(0, 1, 2)]
     normals = compute_vertex_normals(verts, faces)
