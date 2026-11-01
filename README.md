@@ -1,5 +1,7 @@
 # wepes3d
 
+[![tests](https://github.com/FVitor7/wepes3d/actions/workflows/tests.yml/badge.svg)](https://github.com/FVitor7/wepes3d/actions/workflows/tests.yml)
+
 **Put new 3D models into Pro Evolution Soccer (PES / Winning Eleven) for
 PlayStation 2** — new trophies, player faces and hair, and more — to make the
 game look more real.
@@ -84,7 +86,7 @@ flowchart LR
 
 ## Quick start
 
-You only need **Python 3.8+** — no external dependencies. Clone the repository
+You only need **Python 3.9+** — no external dependencies. Clone the repository
 and run the commands from its root:
 
 ```bash

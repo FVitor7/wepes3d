@@ -28,6 +28,13 @@ python -m pytest --cov-report=html
 # open htmlcov/index.html
 ```
 
+### On GitHub (CI)
+
+[`../.github/workflows/tests.yml`](../.github/workflows/tests.yml) runs the
+same suite on every push to `main` and on every pull request, with the oldest
+supported Python (3.9) and the newest one. The job fails if a test fails or if
+the coverage goes below **95%**.
+
 ---
 
 ## What each file tests

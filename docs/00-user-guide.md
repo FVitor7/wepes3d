@@ -34,7 +34,7 @@ python -m wepes3d list    INPUT.bin    [--type ...]
 
 Each subcommand has its own help: `... export --help`, `... import --help`.
 
-> There is nothing to install apart from **Python 3.8+** (no external
+> There is nothing to install apart from **Python 3.9+** (no external
 > dependencies). Run the commands from the repository root (the folder created
 > by `git clone`).
 
