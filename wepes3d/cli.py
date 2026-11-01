@@ -108,8 +108,9 @@ Partition strategies (pick only 1; default = BFS by face adjacency):
                          in the template.
   --part-sizes L       : you choose how many vertices go in each part (comma
                          separated list; the sum = vertices in the .obj).
-  --max-verts-per-part : limits the vertices per part (creates new parts if
-                         needed; max 8 for faces, the game limit).
+  --max-verts-per-part : no part gets more than N vertices (a hard limit,
+                         <= 255); creates new parts when needed (max 8 for
+                         faces, the game limit).
 --match-template partitions by nearest neighbour in template space (use it
 with --auto-fit). All of these need --allow-recount.
 
@@ -138,7 +139,8 @@ Examples:
     part.add_argument("--part-sizes", type=str, default=None, metavar="L",
         help="Manual sizes per part (csv). Needs --allow-recount.")
     part.add_argument("--max-verts-per-part", type=int, default=None, metavar="N",
-        help="Limits the vertices per part. Needs --allow-recount.")
+        help="Hard limit of vertices per part (<= 255); adds parts when needed. "
+             "Needs --allow-recount.")
     p.add_argument("--match-template", action="store_true",
         help="Partitions by nearest neighbour in template space (use it with --auto-fit).")
 

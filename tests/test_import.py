@@ -1,7 +1,9 @@
 """Import .obj -> .bin: roundtrip, partition strategies and errors."""
 
 import pathlib
+import re
 import struct
+from types import SimpleNamespace
 
 import pytest
 
@@ -9,6 +11,8 @@ from wepes3d import (
     compress_bin, decompress_bin, parse_model, import_face, import_trophy,
     export_trophy, trophy_section_offsets,
 )
+from wepes3d.shared.io.obj_io import parse_obj
+from wepes3d.shared.pipeline.importer import _partition
 
 
 def _vcount(bin_path):
@@ -152,6 +156,27 @@ def test_import_trophy_recount_updates_parts_end(trophy_bin, grid_obj, tmp_path)
     assert all(_parts_end_rel_ok(payload, off) for off in secs)
 
 
+def test_max_verts_per_part_is_a_hard_limit(trophy_bin, grid_obj, tmp_path):
+    # Bug 16: the option used to be only an average (this case gave 66 v)
+    out = tmp_path / "t_cap.bin"
+    import_trophy(trophy_bin, grid_obj(30), str(out), section=0, allow_recount=True,
+                  recalculate_normals=True, auto_fit=True, max_verts_per_part=40)
+    payload, _, _ = decompress_bin(str(out))
+    secs = trophy_section_offsets(payload)
+    parts = parse_model(payload, secs[0]).parts
+    assert max(p.vertex_count for p in parts) <= 40
+    assert len(parts) > 14                      # parts added to the template's 14
+    assert all(_parts_end_rel_ok(payload, off) for off in secs)
+
+
+def test_max_verts_per_part_above_255_uses_255(trophy_bin, grid_obj, tmp_path, capsys):
+    out = tmp_path / "t_400.bin"
+    import_trophy(trophy_bin, grid_obj(10), str(out), section=0,
+                  allow_recount=True, auto_fit=True, max_verts_per_part=400)
+    assert "using 255" in capsys.readouterr().out
+    assert out.exists()
+
+
 def test_import_face_model_at_0x20_updates_parts_end(face_bin, grid_obj, tmp_path):
     # face.bin with the model moved from 0x10 to 0x20 (the h2/face_1 layout):
     # the end of the parts at model+0x2C is no longer equal to `parts_end - 16`.
@@ -208,6 +233,44 @@ def test_error_max_verts_needs_too_many_parts(face_bin, grid_obj, tmp_path):
     with pytest.raises(SystemExit):
         import_face(face_bin, grid_obj(8), str(tmp_path / "x.bin"),
                     allow_recount=True, max_verts_per_part=4)   # 64/4=16 > 8 parts
+
+
+def test_error_max_verts_hard_limit_needs_more_than_8_parts(face_bin, grid_obj, tmp_path):
+    # ceil(400/60) = 7 parts on paper, but the seam copies need a 9th part,
+    # and a face stops at 8 (before Bug 16 it made parts with 72 v instead)
+    with pytest.raises(SystemExit):
+        import_face(face_bin, grid_obj(20), str(tmp_path / "x.bin"),
+                    allow_recount=True, max_verts_per_part=60)
+
+
+def test_error_max_verts_below_3(face_bin, grid_obj, tmp_path):
+    with pytest.raises(SystemExit):
+        import_face(face_bin, grid_obj(8), str(tmp_path / "x.bin"),
+                    allow_recount=True, max_verts_per_part=2)
+
+
+def test_error_mesh_too_big_for_the_template_parts(trophy_bin, grid_obj, tmp_path, capsys):
+    # 3600 v do not fit in the 14 parts × 255 v of sec0: a clear stop + a hint
+    with pytest.raises(SystemExit):
+        import_trophy(trophy_bin, grid_obj(60), str(tmp_path / "x.bin"), section=0,
+                      allow_recount=True, auto_fit=True)
+    assert "--max-verts-per-part 255" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("max_parts, hint", [
+    (None, "use --max-verts-per-part 255 to add parts"),
+    (8, "at most 8 for a face"),
+    (2, "a face has at most 2 parts"),
+])
+def test_hint_when_the_mesh_does_not_fit(grid_obj, max_parts, hint):
+    # 2 template parts × 255 v cannot hold a 24×24 grid (576 v)
+    profile = SimpleNamespace(name="face", max_parts=max_parts)
+    template = SimpleNamespace(parts=[object(), object()])
+    with pytest.raises(ValueError, match=re.escape(hint)):
+        _partition(profile, parse_obj(grid_obj(24)), template,
+                   counts_match=False, allow_recount=True,
+                   part_sizes_override=None, max_verts_per_part=None,
+                   use_groups=False, match_template=False, auto_fit=False)
 
 
 def test_error_part_exceeds_255(face_bin, grid_obj, tmp_path):

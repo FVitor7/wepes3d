@@ -124,7 +124,8 @@ python -m wepes3d list   trophy.bin --type trophy
 python -m wepes3d export trophy.bin ps2_cup.obj --type trophy --section 0
 
 # 3. in Blender: make pc_cup.obj lighter and save it as my_cup.obj
-#    (the PES6 cup has ~2,100 vertices — too many for the PS2; aim for ~1,000)
+#    (the PES6 cup has ~2,100 vertices; a lighter model, around 1,000, is
+#    safer for the PS2)
 
 # 4. import it into the PS2 trophy
 python -m wepes3d import trophy.bin my_cup.obj new_trophy.bin \
@@ -134,6 +135,11 @@ python -m wepes3d import trophy.bin my_cup.obj new_trophy.bin \
 `--auto-fit` scales the cup with one uniform scale (it keeps the proportions)
 to the size and position of the PS2 cup. Only section 0 changes; the other
 sub-models and the textures stay the same.
+
+If the model is too heavy for the parts of the PS2 cup, the import stops and
+tells you. Decimate more, or add `--max-verts-per-part 255`: no part gets
+more than 255 vertices, and the import adds the parts it needs (trophies do
+not have the 8-part limit of faces).
 
 Each subcommand has its own help: `... import --help`, `... export --help`.
 The **step-by-step cookbook** is in [docs/00-user-guide.md](docs/00-user-guide.md).
@@ -148,7 +154,8 @@ The **step-by-step cookbook** is in [docs/00-user-guide.md](docs/00-user-guide.m
 | `--section N` | Trophies: which sub-model to replace (0 = the main one). |
 | `--match-template` | With `--auto-fit`, when the `.obj` is anatomical (a face) and you want to match the template regions. |
 | `--use-groups` | You split the mesh into N objects in Blender (1 per part). |
-| `--part-sizes a,b,…` / `--max-verts-per-part N` | Manual control of the partition. |
+| `--max-verts-per-part N` | No part gets more than N vertices (≤ 255); the import adds parts when needed (a face stops at 8). Useful for heavy models, like the ones from PES6 PC. |
+| `--part-sizes a,b,…` | Manual control: how many vertices go in each part. |
 | `--strip-mode connected\|list` | Strip encoding of new parts. `connected` (**default**): connected tristrips (~35% smaller), checked in the game. `list`: triangle list (legacy). |
 | `--no-preserve-strips` | Rare. Encodes every strip again (turns off the zero-diff passthrough). |
 
@@ -343,7 +350,7 @@ glossary). Good places to start:
 
 - [00 — User guide](docs/00-user-guide.md) — step-by-step recipes for every asset.
 - [13 — A face, byte by byte](docs/13-face-byte-by-byte.md) — a guided tour with `examples/face.bin`.
-- [06 — Bug history](docs/06-bug-history.md) — the 15 bugs of the reverse engineering and what each one taught us.
+- [06 — Bug history](docs/06-bug-history.md) — the 16 bugs of the reverse engineering and what each one taught us.
 
 ---
 

@@ -117,6 +117,7 @@ flowchart LR
     E1["'X vertices but Y UVs'"] --> F1["export again with UVs<br/>(faces f v/vt)"]
     E2["'triangle crosses a part border'"] --> F2["add --allow-recount"]
     E3["'--max-verts-per-part needs >8 parts'"] --> F3["remove the option, raise the value,<br/>or decimate more"]
+    E4["'the mesh does not fit in the N parts'"] --> F4["decimate more, or<br/>--max-verts-per-part 255"]
 ```
 
 - **"the .obj has X vertices but Y UVs"** → the faces do not reference `vt`
@@ -129,6 +130,11 @@ flowchart LR
 - **"--max-verts-per-part X needs Y parts, but the maximum is 8"** → remove the
   option (it distributes into 8 automatically), raise the value, or
   **decimate** the mesh.
+- **"the mesh does not fit in the N parts of the template with at most 255
+  vertices per part"** → the mesh is too heavy for the parts of the template
+  (common with models from PES6 PC). **Decimate** it more, or add
+  `--max-verts-per-part 255`: the import adds the parts it needs (a face can
+  have at most 8 parts; trophies have no such limit).
 
 ---
 

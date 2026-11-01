@@ -1,7 +1,7 @@
 # 06 — Bug history
 
-Fifteen bugs found and fixed during the reverse engineering of the format (the
-last three during the review before publishing the project). Each one tells a
+Sixteen bugs found and fixed during the reverse engineering of the format (the
+last four during the review before publishing the project). Each one tells a
 story: the **symptom**, the **investigation** that led to the diagnosis, and
 the **fix**. This is the most valuable part to understand **why** the code is
 the way it is — and how to approach new bugs.
@@ -28,6 +28,7 @@ flowchart LR
         B9["9 · scale/position"]
         B13["13 · degenerate triangle in decode_strip"]
         B15["15 · UV by position, not by vt"]
+        B16["16 · vertex limit per part was only an average"]
     end
 ```
 
@@ -216,6 +217,24 @@ pair (duplicated at seams); `.obj` files that are already aligned are kept as
 they are. The same logic writes the result to disk with
 `convert_obj_to_vertex_uv`. **Lesson:** checking **counts** does not check
 **correspondence**.
+
+## Bug 16 — The vertex limit per part was only an average
+
+**Symptom:** a PES6 PC trophy cup (2,132 vertices) imported into a PS2 trophy
+stopped with `Part 13 has 292 vertices (maximum: 255)` — even with
+`--max-verts-per-part 170`. **Diagnosis:** the option only used N to compute
+how many parts to create (`ceil(vertices / N)`). The BFS then split the
+**triangles** evenly between the parts, and the **last part took everything
+that was left**: small, scattered pieces of the mesh that share few vertices,
+plus the seam copies. So N was an average, not a limit (a test with N = 40
+gave a part with 66 vertices). **Fix:** the BFS counts the vertices of each
+part while it grows (seam copies included) and skips a triangle that would go
+over the limit — 255, or N with the option. When the planned parts are full,
+the option creates more parts; without it, the template's number of parts is
+kept and a mesh that does not fit stops with a clear message. A mesh that
+never reaches the limit is split exactly as before (checked byte by byte on
+faces and trophies). **Lesson:** check a limit where the data is built, do not
+only estimate it from totals.
 
 ---
 

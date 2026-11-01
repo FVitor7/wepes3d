@@ -106,13 +106,25 @@ be in the same part). When a triangle would sit on a border, the shared vertex
 is **duplicated** in the neighbour part — same int16 position and UV, only the
 index changes. No holes, and a small memory cost.
 
-### Adding parts (`--max-verts-per-part`)
+### Vertex limit and adding parts (`--max-verts-per-part`)
 
-If the mesh is big, the BFS can go over 255 v/part. This option makes the
-pipeline **create more parts** (cloning the last part of the template).
+The BFS counts the vertices of each part while the part grows (the seam
+copies count too) and **never goes over the limit**: a triangle that does not
+fit stays for a later part.
+
+- **Without the option**, the limit is 255 (the VIF limit) and the BFS keeps
+  the **number of parts of the template**. If the mesh does not fit, the
+  import stops and says what to do (decimate, or use the option).
+- **With `--max-verts-per-part N`**, the limit is N (at most 255). When the
+  planned parts are full, the pipeline **creates more parts** (cloning the
+  last part of the template).
+
 **Hard limit: 8 parts for faces** — above that, we stop
 ([Bug 12](06-bug-history.md#bug-12--more-than-8-parts--invisible-face)).
-Trophies do not have this limit.
+Trophies do not have this limit. A mesh that never reaches the limit is split
+exactly as before. Until
+[Bug 16](06-bug-history.md#bug-16--the-vertex-limit-per-part-was-only-an-average),
+N was only an average.
 
 ---
 

@@ -25,7 +25,7 @@ with the same UV and position — only the index is duplicated.
 """
 
 from collections import defaultdict, deque, Counter
-from typing import Callable, List, Tuple
+from typing import Callable, List, Optional, Tuple
 
 
 # ============================================================================
@@ -93,14 +93,21 @@ def partition_mesh_by_faces(
     uvs: List[Tuple[float, float]],
     faces: List[Tuple[int, int, int]],
     n_parts: int,
+    max_verts: Optional[int] = None,
 ) -> Tuple[List, List, List[Tuple[int, int, int]], List[int]]:
     """
     Splits into n_parts with a BFS over face adjacency.
 
     1. Builds a graph: face -> neighbour faces (sharing 1+ vertex).
     2. For each part, runs a BFS from an unassigned face until it reaches the
-       target (n_faces / n_parts).
+       target (n_faces / n_parts). The last part takes all the faces left.
     3. Re-indexes: vertices used in several parts are DUPLICATED.
+
+    max_verts: a HARD limit of vertices per part (the seam copies count too).
+    A face that would go over it is skipped and stays for a later part. When
+    the n_parts parts are full, MORE parts are created, so the result can have
+    more than n_parts parts (see len(sizes_per_part)). A mesh that never
+    reaches the limit gives exactly the same result as max_verts=None.
 
     Returns (new_vertices, new_uvs, new_faces_global, sizes_per_part).
     """
@@ -121,30 +128,43 @@ def partition_mesh_by_faces(
                     face_adj[fi].add(fj)
 
     unassigned = set(range(n_faces))
-    part_face_lists: List[List[int]] = [[] for _ in range(n_parts)]
+    part_face_lists: List[List[int]] = []
 
-    for part_idx in range(n_parts):
+    # Without max_verts the last planned part takes everything, so the loop
+    # stops at n_parts. With it, extra parts are created while faces are left
+    # (each new part takes at least its first face: 3 vertices <= max_verts).
+    while len(part_face_lists) < n_parts or unassigned:
+        part_idx = len(part_face_lists)
+        part_faces: List[int] = []
+        part_face_lists.append(part_faces)
         if not unassigned:
-            break
-        is_last = (part_idx == n_parts - 1)
-        local_target = len(unassigned) if is_last else target
+            continue
+        local_target = target if part_idx < n_parts - 1 else len(unassigned)
 
-        count = 0
-        while count < local_target and unassigned:
-            seed = min(unassigned)
+        used: set = set()          # vertices already in this part
+        # Seeds in increasing order (= min(unassigned) at each step)
+        for seed in sorted(unassigned):
+            if len(part_faces) >= local_target:
+                break
+            if seed not in unassigned:
+                continue
             queue: deque = deque([seed])
-            while queue and count < local_target:
+            while queue and len(part_faces) < local_target:
                 fi = queue.popleft()
                 if fi not in unassigned:
                     continue
-                part_face_lists[part_idx].append(fi)
+                new_verts = set(faces[fi]) - used
+                if max_verts is not None and len(used) + len(new_verts) > max_verts:
+                    continue       # does not fit: it stays for a later part
+                part_faces.append(fi)
                 unassigned.discard(fi)
-                count += 1
+                used |= new_verts
                 for fj in face_adj[fi]:
                     if fj in unassigned:
                         queue.append(fj)
 
-    return _reindex_partition(vertices, uvs, faces, part_face_lists, n_parts)
+    return _reindex_partition(vertices, uvs, faces, part_face_lists,
+                              len(part_face_lists))
 
 
 # ============================================================================

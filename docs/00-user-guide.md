@@ -275,8 +275,10 @@ python -m wepes3d import trophy.bin my_cup.obj new_trophy.bin \
     --type trophy --section 0 --allow-recount --recalculate-normals --auto-fit
 ```
 
-If the import stops with `Part N has X vertices (maximum: 255)`, the model is
-still too heavy: decimate it more.
+If the import stops with `the mesh does not fit in the N parts of the
+template…`, the model is still too heavy for the parts of the PS2 template:
+decimate it more, or add `--max-verts-per-part 255` so that the import adds
+the parts it needs (trophies have no part limit; a face has at most 8).
 
 ---
 

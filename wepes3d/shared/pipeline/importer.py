@@ -391,36 +391,76 @@ def _partition(
               f"Falling back to automatic BFS. In Blender: split the face into "
               f"{n_parts} objects and export a multi-object .obj.")
 
-    # Default: BFS by adjacency
-    # May add parts beyond the template when max_verts_per_part is given
+    # Default: BFS by adjacency. No part may go over `cap` vertices: the VIF
+    # limit (255), or the --max-verts-per-part value. Only that option may add
+    # parts beyond the template.
+    cap = MAX_VERTEX_COUNT_PER_PART
     if max_verts_per_part is not None:
-        n_needed = max(n_parts, math.ceil(len(obj.vertices) / max_verts_per_part))
-        if profile.max_parts is not None and n_needed > profile.max_parts:
-            min_vc = math.ceil(len(obj.vertices) / profile.max_parts)
-            print(f"\nERROR: --max-verts-per-part {max_verts_per_part} needs "
-                  f"{n_needed} parts, but {profile.name} supports at most "
-                  f"{profile.max_parts} (byte[0x04]=8 in all face examples).")
-            print(f"      With > {profile.max_parts} parts the face becomes INVISIBLE.")
-            print(f"      Solutions:")
-            print(f"        1. Raise --max-verts-per-part to >= {min_vc}")
-            print(f"        2. Remove --max-verts-per-part (automatic distribution)")
-            print(f"        3. Reduce the number of vertices in the .obj "
-                  f"(max ~{MAX_VERTEX_COUNT_PER_PART * profile.max_parts})")
-            sys.exit(1)
-        if n_needed > n_parts:
-            donor = template.parts[-1]
-            effective_parts = list(template.parts) + [
-                clone_part_structure(donor) for _ in range(n_needed - n_parts)
-            ]
-            n_parts = n_needed
-            print(f"      Parts added: {len(template.parts)} -> {n_parts}")
+        if max_verts_per_part < 3:
+            raise ValueError("--max-verts-per-part must be at least 3 (one triangle).")
+        if max_verts_per_part > MAX_VERTEX_COUNT_PER_PART:
+            print(f"      [WARNING] --max-verts-per-part {max_verts_per_part} is above "
+                  f"the VIF limit: using {MAX_VERTEX_COUNT_PER_PART}.")
+            cap = MAX_VERTEX_COUNT_PER_PART
+        else:
+            cap = max_verts_per_part
+        # The fewest parts possible: stop early if even that is too many
+        n_parts = max(n_parts, math.ceil(len(obj.vertices) / cap))
+        _check_max_parts(profile, n_parts, cap, len(obj.vertices))
 
     print(f"      Partitioning mesh by faces (BFS) into {n_parts} groups...")
     work_v, work_u, work_f, sizes = partition_mesh_by_faces(
-        obj.vertices, obj.uvs, obj.faces, n_parts,
+        obj.vertices, obj.uvs, obj.faces, n_parts, max_verts=cap,
     )
+    if len(sizes) > n_parts:
+        # The planned parts are full (seam copies and scattered leftovers
+        # need more vertices than the average).
+        if max_verts_per_part is None:
+            if profile.max_parts is None:
+                hint = "Decimate the mesh, or use --max-verts-per-part 255 to add parts."
+            elif n_parts < profile.max_parts:
+                hint = (f"Decimate the mesh, or use --max-verts-per-part to add parts "
+                        f"(at most {profile.max_parts} for a {profile.name}).")
+            else:
+                hint = (f"Decimate the mesh (a {profile.name} has at most "
+                        f"{profile.max_parts} parts).")
+            raise ValueError(
+                f"the mesh does not fit in the {n_parts} parts of the template "
+                f"with at most {cap} vertices per part (it needs {len(sizes)} "
+                f"parts). {hint}")
+        print(f"      The {n_parts} parts are full (max {cap} v each): "
+              f"{len(sizes)} parts needed")
+        n_parts = len(sizes)
+        _check_max_parts(profile, n_parts, cap, len(obj.vertices))
+
+    if n_parts > len(template.parts):
+        donor = template.parts[-1]
+        effective_parts = list(template.parts) + [
+            clone_part_structure(donor) for _ in range(n_parts - len(template.parts))
+        ]
+        print(f"      Parts added: {len(template.parts)} -> {n_parts}")
     _log_seam_stats(obj.vertices, work_v)
     return work_v, work_u, work_f, sizes, effective_parts, n_parts
+
+
+def _check_max_parts(profile: AssetProfile, n_needed: int, cap: int,
+                     n_vertices: int) -> None:
+    """Stops if --max-verts-per-part needs more parts than the asset allows
+    (faces: 8 — Bug 12)."""
+    if profile.max_parts is None or n_needed <= profile.max_parts:
+        return
+    # A lower bound: the seam copies may need even more
+    min_vc = max(math.ceil(n_vertices / profile.max_parts), cap + 1)
+    print(f"\nERROR: --max-verts-per-part {cap} needs "
+          f"{n_needed} parts, but {profile.name} supports at most "
+          f"{profile.max_parts} (byte[0x04]=8 in all face examples).")
+    print(f"      With > {profile.max_parts} parts the face becomes INVISIBLE.")
+    print(f"      Solutions:")
+    print(f"        1. Raise --max-verts-per-part (it needs at least {min_vc})")
+    print(f"        2. Remove --max-verts-per-part (automatic distribution)")
+    print(f"        3. Reduce the number of vertices in the .obj "
+          f"(max ~{MAX_VERTEX_COUNT_PER_PART * profile.max_parts})")
+    sys.exit(1)
 
 
 def _log_seam_stats(orig, new):

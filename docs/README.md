@@ -89,7 +89,7 @@ change:
 | 03 | [Import pipeline](03-import-pipeline.md) | The 7 phases of `.obj → .bin` (partition, normals, rebuild, patches). |
 | 04 | [VIF and VU1](04-vif-and-vu1.md) | The microcode that decodes the geometry (UNPACK, vertex formats). |
 | 05 | [Strip encoding](05-strip-encoding.md) | Connected triangle strip (default) vs triangle list, winding, ADC. |
-| 06 | [Bug history](06-bug-history.md) | The 15 bugs of the reverse engineering and how each one was diagnosed. |
+| 06 | [Bug history](06-bug-history.md) | The 16 bugs of the reverse engineering and how each one was diagnosed. |
 | 07 | [Debugging guide](07-debugging-guide.md) | Symptoms (invisible, holes, spikes) → causes → solution. |
 | 08 | [Trophies](08-trophies.md) | Nested container, section directory, universal geometry reader. |
 | 09 | [Stadiums and kits](09-stadiums-and-kits.md) | "Model folders", containers, robust scan, LODs, groups/dedup options. |
