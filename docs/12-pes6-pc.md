@@ -2,7 +2,10 @@
 
 PES6 (and Winning Eleven) for **PC** uses a 3D format that is **different**
 from PS2. This document covers what we found and the current support
-(**export only**, `.bin/.str → .obj`). The implementation lives on its own in
+(**export only**, `.bin/.str → .obj`). PC is a **source** of models: the goal
+is to bring them to **PES PS2** (export from PC → Blender → import into a PS2
+`.bin`, see [00 — Recipe 7](00-user-guide.md#recipe-7--bring-a-pes6-pc-model-to-ps2)).
+The implementation lives on its own in
 `adapters/pes6pc/` — it does **not** share the PS2 engine, only the common I/O
 (`shared/io`).
 
@@ -148,10 +151,13 @@ export_pc("face.bin", "face.obj")                  # face = 1 model
 - ✅ **Export** of PC faces (1 model) and PC trophies (N parts) — by model,
   complete and by parts. The triangle count matches the `total_f` declared in
   each part.
-- ⏳ **Import** (.obj → PC .bin) — not implemented.
+- ➖ **Import into PC files** — not a goal: the target of the project is
+  PES PS2.
 
-> PC is **export-only** for now: `--type pc` exists in the `export` and `list`
-> subcommands, but `import` rejects it.
+> PC is **export-only**: `--type pc` exists in the `export` and `list`
+> subcommands, but `import` rejects it. To use a PC model in PES PS2, import
+> its `.obj` into a PS2 template
+> ([Recipe 7](00-user-guide.md#recipe-7--bring-a-pes6-pc-model-to-ps2)).
 
 ---
 

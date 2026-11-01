@@ -1,6 +1,10 @@
 """
 wepes3d: .obj <-> .bin importer/exporter for PES.
 
+Main goal: import NEW 3D models (trophies, faces, hair...) into PES PS2, to
+make the game more real. The export exists to open the original models in
+Blender and use them as a starting point.
+
 Two platforms, kept apart in adapters/ (PC and PS2 are DIFFERENT formats):
   * PS2 (adapters/pesweps2): FACES/HAIR, TROPHIES, STADIUMS, KITS.
         Import + export. int16, 0300ffff model, VIF unpacks.

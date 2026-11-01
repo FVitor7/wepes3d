@@ -6,8 +6,9 @@ between real game files — is written here, so that the community can
 understand it, trust it and contribute. The docs are **self-contained**: they
 do not depend on any file or tool outside this package.
 
-> What the tool does, what it supports, how to install it and the project
-> principles are in the [project README](../README.md).
+> Why the project exists (importing new 3D models into PES PS2, like new
+> trophies and real faces), what it supports, how to install it and the
+> project principles are in the [project README](../README.md).
 
 ---
 
@@ -20,7 +21,7 @@ do not depend on any file or tool outside this package.
 | **Understand the `.bin` format** | [01](01-bin-format.md) → [02](02-payload-anatomy.md) → [04](04-vif-and-vu1.md) → [05](05-strip-encoding.md) |
 | **Change the code** | [10 — Architecture](10-architecture.md) |
 | **Fix a problem** | [07 — Debugging guide](07-debugging-guide.md) · [06 — Bug history](06-bug-history.md) |
-| **Work with PES6 PC** | [12 — PES6 PC](12-pes6-pc.md) |
+| **Bring a PES6 PC model to PS2** | [00 — Recipe 7](00-user-guide.md#recipe-7--bring-a-pes6-pc-model-to-ps2) · [12 — PES6 PC](12-pes6-pc.md) |
 
 ---
 
@@ -94,7 +95,7 @@ change:
 | 09 | [Stadiums and kits](09-stadiums-and-kits.md) | "Model folders", containers, robust scan, LODs, groups/dedup options. |
 | 10 | [Architecture](10-architecture.md) | Code layout: `shared/` (core) + `adapters/` (by platform/asset). |
 | 11 | [Coordinates](11-coordinates.md) | `CoordSpace`: the lossless int16 ↔ float conversion of each asset + UV. |
-| 12 | [PES6 PC](12-pes6-pc.md) | The PC platform: `20050420` format, trophy container, export. |
+| 12 | [PES6 PC](12-pes6-pc.md) | The PC platform (a source of models for PS2): `20050420` format, trophy container, export. |
 | **13** | [Example: a face, byte by byte](13-face-byte-by-byte.md) | Guided tour with `examples/face.bin`: `list`/`export`/`import`, every byte explained. |
 
 ---

@@ -1,19 +1,80 @@
 # wepes3d
 
-**Exporter and importer of Pro Evolution Soccer 3D models** between the game's
-`.bin`/`.str` format and `.obj` (Wavefront, editable in Blender). Pure Python,
+**Put new 3D models into Pro Evolution Soccer (PES / Winning Eleven) for
+PlayStation 2** — new trophies, player faces and hair, and more — to make the
+game look more real.
+
+You make or edit the model in Blender, save it as `.obj`, and wepes3d writes a
+game `.bin` that the PS2 (or the PCSX2 emulator) can load. Pure Python,
 **no external dependencies**.
 
-It covers two platforms and four asset types:
+> **In short:** the target is always **PES on PS2**. The other features —
+> exporting PS2 models and exporting PES6 PC models — exist to help you get a
+> good model into the PS2 game.
 
-| Platform | Asset | Export (`→ .obj`) | Import (`.obj →`) |
-|---|---|:---:|:---:|
-| **PES/WE PlayStation 2** | Face / hair | ✅ | ✅ |
-| | Trophy (and sub-models) | ✅ | ✅ |
-| | Stadium / crowd / boards | ✅ | ⏳ planned |
-| | Kit (uniform / hands) | ✅ | ⏳ planned |
-| **PES6 / WE PC** | Face / hair | ✅ | ⏳ planned |
-| | Trophy | ✅ | ⏳ planned |
+---
+
+## Why this project?
+
+PES and Winning Eleven on PS2 are still alive thanks to the modding community,
+which keeps updating teams, players and kits. But the **3D models** were
+always the hard part: a new trophy or the real face of a player needs a new
+mesh inside the game files, and the PS2 format makes this very hard to do by
+hand (see [the hard part: derived bytes](#the-hard-part-derived-bytes)).
+
+**The main goal of wepes3d is to import new 3D models into PES PS2**, so that
+modders can bring more realism to the game:
+
+- **New trophies** — the real trophy of a competition, made in Blender or
+  taken from PES6 PC.
+- **Faces and hair** — the real look of a player.
+- **Stadiums and kits** — next on the list (export already works; import is
+  planned).
+
+---
+
+## Where the models come from, and where they go
+
+```mermaid
+flowchart LR
+    PC["PES6 PC<br/>.bin / .str"] -->|"export"| OBJ[".obj"]
+    PS2["PES PS2<br/>original .bin"] -->|"export"| OBJ
+    NEW["a model you made<br/>(Blender or other source)"] --> OBJ
+    OBJ --> BL["Blender:<br/>adjust · make lighter · UVs"]
+    BL -->|"import"| OUT["new PES PS2 .bin"]
+    PS2 -.->|"template"| OUT
+    OUT --> GAME["PES on PS2 / PCSX2"]
+```
+
+| Step | What it is for |
+|---|---|
+| **Export from PES PS2** | Open the original model in Blender: see its size and position, use it as a starting point and check your result. |
+| **Export from PES6 PC** | **Bring PC models to the PS2.** The PES6 PC modding scene made many trophies and faces. Export them to `.obj`, make them lighter in Blender and import them into a PS2 `.bin`. |
+| **Import into PES PS2** | **The main goal.** Writes your `.obj` into a PS2 `.bin`. The original game file is the template: its textures, bones and other sub-models are kept. |
+
+> **PC is only a source.** wepes3d does not write PES6 PC files, and this is
+> not a goal of the project: PC models are exported only to be brought to the
+> PS2.
+
+---
+
+## What it supports
+
+**PES / WE on PlayStation 2 — the target:**
+
+| Asset | Import (`.obj → .bin`) | Export (`.bin → .obj`) |
+|---|:---:|:---:|
+| Face / hair | ✅ | ✅ |
+| Trophy (and its sub-models) | ✅ | ✅ |
+| Stadium / crowd / boards | ⏳ planned | ✅ |
+| Kit (uniform / hands) | ⏳ planned | ✅ |
+
+**PES6 / WE on PC — a source of models for the PS2:**
+
+| Asset | Export (`.bin/.str → .obj`) |
+|---|:---:|
+| Face / hair | ✅ |
+| Trophy | ✅ |
 
 > 📚 **Full technical documentation in [docs/](docs/README.md)** — the
 > knowledge base of the reverse engineering of the format, with diagrams and
@@ -35,24 +96,46 @@ The CLI has **three subcommands**:
 
 ```mermaid
 flowchart LR
-    CLI["python -m wepes3d"] --> E["export · .bin/.str → .obj"]
-    CLI --> I["import · .obj → .bin"]
+    CLI["python -m wepes3d"] --> I["import · .obj → PS2 .bin"]
+    CLI --> E["export · .bin/.str → .obj"]
     CLI --> L["list · shows the structure"]
 ```
 
+### Example 1 — a new face in PES PS2
+
 ```bash
-# EXPORT (to open in Blender) — writes .obj + .mtl
+# see the original face in Blender (writes .obj + .mtl)
 python -m wepes3d export face.bin face.obj --type face
 
-# IMPORT a new face (the main use case)
+# import your new face (face.bin is the template)
 python -m wepes3d import face.bin my_face.obj out.bin \
-    --type auto --allow-recount --recalculate-normals --auto-fit
-
-# LIST the structure (trophy sections, stadium/kit models, PC parts…)
-python -m wepes3d list trophy.bin --type trophy
+    --type face --allow-recount --recalculate-normals --auto-fit
 ```
 
-Each subcommand has its own help: `... export --help`, `... import --help`.
+### Example 2 — a PES6 PC trophy in PES PS2
+
+```bash
+# 1. export the cup (part 0) of the PES6 PC trophy
+python -m wepes3d list   pl.str --type pc
+python -m wepes3d export pl.str pc_cup.obj --type pc --model 0
+
+# 2. look at the PS2 trophy you will replace (section 0 = the main cup)
+python -m wepes3d list   trophy.bin --type trophy
+python -m wepes3d export trophy.bin ps2_cup.obj --type trophy --section 0
+
+# 3. in Blender: make pc_cup.obj lighter and save it as my_cup.obj
+#    (the PES6 cup has ~2,100 vertices — too many for the PS2; aim for ~1,000)
+
+# 4. import it into the PS2 trophy
+python -m wepes3d import trophy.bin my_cup.obj new_trophy.bin \
+    --type trophy --section 0 --allow-recount --recalculate-normals --auto-fit
+```
+
+`--auto-fit` scales the cup with one uniform scale (it keeps the proportions)
+to the size and position of the PS2 cup. Only section 0 changes; the other
+sub-models and the textures stay the same.
+
+Each subcommand has its own help: `... import --help`, `... export --help`.
 The **step-by-step cookbook** is in [docs/00-user-guide.md](docs/00-user-guide.md).
 
 ### `import` options
@@ -61,7 +144,8 @@ The **step-by-step cookbook** is in [docs/00-user-guide.md](docs/00-user-guide.m
 |---|---|
 | `--allow-recount` | Almost always. Allows an `.obj` whose vertex count is different from the template. |
 | `--recalculate-normals` | Almost always. Computes the normals of the new geometry. |
-| `--auto-fit` | When the `.obj` has any scale/position (Blender). Scales and centers it into the template bbox. |
+| `--auto-fit` | When the `.obj` has any scale/position (Blender, PES6 PC). Scales and centers it into the template bbox. |
+| `--section N` | Trophies: which sub-model to replace (0 = the main one). |
 | `--match-template` | With `--auto-fit`, when the `.obj` is anatomical (a face) and you want to match the template regions. |
 | `--use-groups` | You split the mesh into N objects in Blender (1 per part). |
 | `--part-sizes a,b,…` / `--max-verts-per-part N` | Manual control of the partition. |
@@ -83,9 +167,13 @@ The **step-by-step cookbook** is in [docs/00-user-guide.md](docs/00-user-guide.m
 2. **UVs:** *seams* and different `v`/`vt` indices (Blender export) are
    handled while reading — the vertex is duplicated at each seam.
    `UV → Merge UVs by Distance` still helps to save vertices.
-3. **Decimate** to the budget: **≤ ~1,300 vertices** in total and **≤ ~170 per
-   region** (the strip overflows before the 255 v/part limit).
+3. **Decimate** to the budget: for a face, **≤ ~1,300 vertices** in total and
+   **≤ ~170 per region** (the strip overflows before the 255 v/part limit).
+   Models from PES6 PC are usually heavier than PS2 models.
 4. Export **with UVs**. Any scale/position is fine (use `--auto-fit`).
+5. **Textures are not converted.** The new `.bin` keeps the texture of the
+   template, so the UVs of your model must match that texture (or change the
+   texture with another tool).
 
 **Format limits:** ≤ 255 vertices and ~340 triangles per part; ≤ 8 parts per
 face model (trophies have no 8-part limit). The reasons are in the
@@ -103,21 +191,22 @@ from wepes3d import (
     export_pc, export_pc_complete, list_pc,
 )
 
-# Face / hair (PS2):
+# Import a face / hair (PS2):
 import_face("face.bin", "my_face.obj", "out.bin",
             allow_recount=True, recalculate_normals=True, auto_fit=True)
 
-# Trophy (section=0 = main; 1+ = base/stage/etc.):
-import_trophy("trophy.bin", "cup.obj", "out.bin", section=0, allow_recount=True)
+# Import a trophy (section=0 = main; 1+ = base/stage/etc.):
+import_trophy("trophy.bin", "my_cup.obj", "out.bin", section=0,
+              allow_recount=True, recalculate_normals=True, auto_fit=True)
 
 # Detects face vs trophy from the magic:
 import_auto("any.bin", "new.obj", "out.bin", allow_recount=True)
 
 # Export (.bin → .obj + .mtl):
 export_face("face.bin", "face.obj")
-export_trophy("trophy.bin", "cup.obj", section=0)
+export_trophy("trophy.bin", "ps2_cup.obj", section=0)
 export_stadium_complete("stadium.bin", "stadium.obj")
-export_pc_complete("pl.str", "pc_trophy.obj")        # PES6 PC
+export_pc("pl.str", "pc_cup.obj", model=0)           # PES6 PC: a source for PS2
 
 # Rewrite an .obj with 1 UV per vertex (`f i/i`). The import already does
 # this while reading; useful to check in Blender what it will see:
@@ -135,8 +224,9 @@ print(detect_asset_type(payload))                    # 'face' or 'trophy'
 ## How it works (in 1 minute)
 
 A `.bin`/`.str` has **3 layers**: file (zlib) → payload (the wrapper) → parts
-(the geometry). The **internal 3D model is the same** for every asset; only the
-wrapper and the scale/axes change.
+(the geometry). The **internal 3D model is the same** for every PS2 asset; only
+the wrapper and the scale/axes change. (PES6 PC uses a different format — see
+[docs/12](docs/12-pes6-pc.md).)
 
 ```mermaid
 flowchart LR
@@ -233,8 +323,8 @@ wepes3d/                   repository root
 │   │   ├── model/             parser · reader (universal) · strip · strip_connected · rebuilder
 │   │   └── pipeline/          assets · importer · exporter · folder · partition
 │   └── adapters/          by PLATFORM
-│       ├── pesweps2/          PS2: faces · trophies · stadiums · kits
-│       └── pes6pc/            PC:  coords · reader (export only)
+│       ├── pesweps2/          PS2 (the target): faces · trophies · stadiums · kits
+│       └── pes6pc/            PC (a source): coords · reader (export only)
 ├── tests/                 pytest suite + real seed files (seed/)
 ├── docs/                  technical documentation
 ├── examples/              sample face.bin

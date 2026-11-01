@@ -2,6 +2,8 @@
 
 Practical, step-by-step recipes for the most common tasks. If you only want to
 **use** the tool (without learning how the format works inside), start here.
+The main goal is to **import new models into PES PS2** (Recipes 3, 4 and 7);
+the exports help you get there.
 
 > To learn *how the format works*, read [01](01-bin-format.md)…[05](05-strip-encoding.md).
 > To *fix a problem*, read [07 — Debugging guide](07-debugging-guide.md).
@@ -43,7 +45,8 @@ Each subcommand has its own help: `... export --help`, `... import --help`.
 ```mermaid
 flowchart TD
     Q1{"What do you want?"}
-    Q1 -->|"see/edit a game model"| EXP["EXPORT → Recipe 1 / 4 / 5 / 6 / 7"]
+    Q1 -->|"see/edit a game model"| EXP["EXPORT → Recipe 1 / 4 / 5 / 6"]
+    Q1 -->|"bring a PES6 PC model to PS2"| R7["Recipe 7<br/>(export from PC → import into PS2)"]
     Q1 -->|"put new geometry in the game"| Q2{"same vertex<br/>count?"}
     Q2 -->|yes| R2["Recipe 2<br/>(light edit)"]
     Q2 -->|no| R3["Recipe 3<br/>(new face) + --allow-recount"]
@@ -236,24 +239,44 @@ Two useful options to inspect the model in Blender:
 
 ---
 
-## Recipe 7 — PES6 PC (faces and trophies)
+## Recipe 7 — Bring a PES6 PC model to PS2
 
 PES6 **PC** has a **different** format from PS2 (see
-[12 — PES6 PC](12-pes6-pc.md)). Only **export** is supported for now, and it
-works like a "model folder":
+[12 — PES6 PC](12-pes6-pc.md)). wepes3d only **exports** PC models: they are a
+**source** of models for PES PS2, not a target. The path is: export from PC →
+make the model lighter in Blender → import it into a PS2 `.bin`.
+
+**1. Export from PC** (it works like a "model folder"):
 
 ```bash
 python -m wepes3d list   pl.str    --type pc                        # structure (parts)
 python -m wepes3d export pl.str    trophy.obj --type pc --all       # whole trophy
-python -m wepes3d export pl.str    cup.obj    --type pc --model 0   # only part 0
+python -m wepes3d export pl.str    cup.obj    --type pc --model 0   # only part 0 (the cup)
 python -m wepes3d export Kroos.bin face.obj   --type pc             # face (1 model)
 ```
 ```python
 from wepes3d import list_pc, export_pc, export_pc_complete
 list_pc("pl.str")
 export_pc_complete("pl.str", "trophy.obj")
+export_pc("pl.str", "cup.obj", model=0)   # only part 0
 export_pc("Kroos.bin", "face.obj")        # a PC face = 1 model
 ```
+
+**2. In Blender:** make the model lighter (PC models are heavier: the PES6
+cup has ~2,100 vertices; aim for ~1,000), and check the UVs against the
+texture of the PS2 template — textures are not converted. Save it as `.obj`.
+
+**3. Import it into PS2** like any new model — a trophy with
+[Recipe 4](#recipe-4--trophy-export-a-section-and-import), a face with
+[Recipe 3](#recipe-3--import-a-new-face-the-main-use-case):
+
+```bash
+python -m wepes3d import trophy.bin my_cup.obj new_trophy.bin \
+    --type trophy --section 0 --allow-recount --recalculate-normals --auto-fit
+```
+
+If the import stops with `Part N has X vertices (maximum: 255)`, the model is
+still too heavy: decimate it more.
 
 ---
 
