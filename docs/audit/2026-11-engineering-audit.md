@@ -760,3 +760,7 @@ Fix in this order (each step keeps the zero-diff passthrough):
 6. **Architecture:** one shared part parser for import and export (the
    cause of A-01/A-02/A-10); `WepesError` instead of `sys.exit` (A-22);
    fix the docs listed in A-17 after the code changes.
+
+A second, adversarial pass that attacks these conclusions (and adds B-01 to
+B-08, including multi-texture face templates) is in
+[2026-11-second-pass-review.md](2026-11-second-pass-review.md).
